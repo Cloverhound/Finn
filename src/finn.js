@@ -1,0 +1,433 @@
+
+/**
+* Convenience library wrapping the Finesse API.
+* Let's you build gadgets with less boilerplate.
+*/
+Finn = (function ($) {
+    'use strict';
+
+    function Finn(gadgetName) {
+    	this.gadgetName = gadgetName;
+    }
+    heir.inherit(Finn, EventEmitter);
+
+    Finn.Agent = function() { }
+    heir.inherit(Finn.Agent, EventEmitter);
+
+    Finn.Queue = function() { }
+    heir.inherit(Finn.Queue, EventEmitter);
+
+    Finn.prototype.load = function (callback) {
+        this.loadCallback = callback;
+
+        console.log("Initializing gadget " + this.gadgetName);
+
+        if (gadgets.Hub && gadgets.Hub.isConnected()) {
+            console.log("Hub already connected, continuing - " + this.gadgetName);
+            this._finishLoad();
+        }
+        else {
+            console.log("Hub not connected, waiting - " + this.gadgetName);
+            gadgets.HubSettings.onConnectHandler = this._finishLoad.bind(this);
+        }
+    };
+
+    Finn.prototype._finishLoad = function () {
+        var self = this;
+        console.log("Connected to gadget hub, continuing loading " + this.gadgetName);
+
+        this.logger = finesse.cslogger.ClientLogger;
+        this.logger.init(gadgets.Hub, this.gadgetName);
+        finesse.clientservices.ClientServices.setLogger(this.logger);
+        this.log = logger.log;
+        this.log("The client logger has been initialized for the " + this.gadgetName + " gadget.");
+
+        finesse.clientservices.ClientServices.registerOnConnectHandler(function() {
+            new finesse.restservices.User({
+                id: finesse.gadget.Config.id,
+                onLoad: self._userLoaded.bind(self),
+                onError: self._userLoadError.bind(self),
+                onChange: self._userChanged.bind(self)
+            });
+        });
+
+        finesse.clientservices.ClientServices.init(finesse.gadget.Config, false);
+        self._setupContainer();        
+    };
+
+    Finn.prototype._userLoaded = function (user) {
+        var self = this;
+        this.logger.log("User loaded.");
+        this.agent = getAgentFromResponse(user);
+
+        user.getQueues({
+            onCollectionAdd: self._queueAdded.bind(self),
+            onCollectionDelete: self._queueDeleted.bind(self),
+            onLoad: self._queuesLoaded.bind(self),
+            onError: self._queueLoadError.bind(self)
+        });
+
+        this.teams = {};
+        if (isSupervisor(user)) {
+            // Array of objects with an id and name property
+            // for each team supervised by the supervisor.
+            var supervisedTeamList = user.getSupervisedTeams();
+            $.each(supervisedTeamList, function(index, team) {
+                self._teamLoadStatus = self._teamLoadStatus || {};
+                self._teamLoadStatus[team.id] = false;
+
+                self._loadTeam(team.id)
+            });
+        }
+    };
+
+    Finn.prototype._userChanged = function (user) {
+        this.agent = getAgentFromResponse(user);
+
+        this.emit('agent updated', this.agent);
+    };
+
+    Finn.prototype._userLoadError = function (error) {
+        console.error(error);
+
+        if (!loaded && this.loadCallback) {
+            this.loadCallback(error);
+        }
+    };
+
+    Finn.prototype._setupContainer = function () {
+        self.container = finesse.containerservices.ContainerServices.init();
+        self.container.addHandler(finesse.containerservices.ContainerServices.Topics.ACTIVE_TAB, self.emit.bind(self, 'tab active'));
+        self.container.makeActiveTabReq();
+    }
+
+    Finn.prototype._loadTeam = function (id) {
+        var self = this;
+        this.logger.log("Loading Team: " + id);
+        if (this.teams[id]) { // If we've previously constructed this team already, simply refresh it.
+            this.teams[id].refresh();
+        } 
+        else {
+            this.teams[id] = new finesse.restservices.Team({
+                id: id,
+                onLoad: self._teamLoaded.bind(self),
+                onChange: self._teamChanged.bind(self),
+                onError: self._teamLoadError.bind(self)
+            });
+        }
+    };
+
+    Finn.prototype._teamChanged = function (team) {
+        this.logger.log("Team changed " + team.getId());
+        this._teamLoaded(team);
+    }
+
+    Finn.prototype._teamLoaded = function (team) {
+        var self = this;
+        this.logger.log("Team loaded " + team.getId());
+        this.emitEvent('team loaded', team);
+
+        team._rawUsers = team.getUsers({
+            onCollectionAdd: self._supervisedAgentAdded.bind(self, team.getId()),
+            onCollectionDelete: self._supervisedAgentDeleted.bind(self, team.getId()),
+            onLoad: self._teamRosterLoaded.bind(self, team.getId()),
+            onError: self._teamRosterLoadError.bind(self)
+        });
+    };
+
+    Finn.prototype._teamLoadError = function (err) {
+        this.logger.log("Team load error " + err);
+        console.error(err);
+    };
+
+    Finn.prototype._supervisedAgentDeleted = function (teamId, agent) {
+        this.logger.log("Supervised agent deleted from team " + teamId);
+
+        delete this.teams[teamId].roster[agent.getId()];
+        this.emit('supervised agent deleted', agent.getId());
+    };
+
+    Finn.prototype._supervisedAgentAdded = function (teamId, agent) {
+        this.logger.log("Supervised agent added to team " + teamId);
+
+        var roster = this.teams[teamId].roster;
+        this._loadSupervisedAgent(agent, teamId, roster);
+    };
+
+    Finn.prototype._teamRosterLoaded = function (teamId, rosterResponse) {
+        var self = this;
+        this.logger.log("Team roster loaded " + teamId);
+        var rawRoster = rosterResponse.getCollection();
+        var roster = {};
+        roster._raw = rawRoster;
+
+        this.teams[teamId].roster = roster;
+
+        $.each(rawRoster, function (agentId, agent) {
+            self.logger.log("Loading roster agent " + agentId);
+            self._loadSupervisedAgent(agent, teamId, roster);
+        });
+
+        this._teamLoadStatus[teamId] = true;
+        if (!this.loaded && isLoaded(this._queueLoadStatus) && isLoaded(this._teamLoadStatus)) {
+            if (this.loadCallback)
+                this.loadCallback(null, this.agent);
+            this.loaded = true;
+        }
+    };
+
+    Finn.prototype._loadSupervisedAgent = function (agent, teamId, roster) {
+        var agentId = agent.getId();
+        var agentToAdd = getAgentFromResponse(agent);
+        roster[agentId] = agentToAdd;
+
+        agent.getQueues({
+            onCollectionAdd: this._supervisedAgentQueueAdded.bind(this, agentId, teamId),
+            onCollectionDelete: this._supervisedAgentQueueDeleted.bind(this, agentId, teamId),
+            onLoad: this._supervisedAgentQueueListLoaded.bind(this, agentId, teamId),
+            onError: this._teamLoadError.bind(this)
+        });
+
+        this.emit('supervised agent loaded', agentToAdd);
+        agent.addHandler('change', this._supervisedAgentChanged.bind(this));
+    };
+
+    Finn.prototype._supervisedAgentQueueListLoaded = function (agentId, teamId, queuesResponse) {
+        var self = this;
+        this.logger.log("Queues loaded for supervised agent: " + agentId);
+        this.teams[teamId].roster[agentId].queues = this.teams[teamId].roster[agentId].queues || {};
+        var rawQueues = queuesResponse.getCollection();
+        $.each(rawQueues, function (id, queue) {
+            queue.addHandler('change', self._supervisedAgentQueueChanged.bind(self, agentId, teamId));
+            queue.addHandler('load', self._supervisedAgentQueueLoaded.bind(self, agentId, teamId));
+        });
+    };
+
+    Finn.prototype._supervisedAgentQueueLoaded = function (agentId, teamId, rawQueue) {
+        this.logger.log("Supervised Agent Queue loaded: " + rawQueue.getId() + " for: " + agentId);
+        var queue = getQueueFromResponse(rawQueue);
+        this.teams[teamId].roster[agentId].queues[queue.id] = queue;
+
+        var affectedAgent = this.teams[teamId].roster[agentId]
+        this.emit('supervised agent updated', affectedAgent);
+        affectedAgent.emit('updated', affectedAgent);
+
+        return queue;
+    };
+
+    Finn.prototype._supervisedAgentQueueChanged = function (agentId, teamId, rawQueue) {
+        this.logger.log("Supervised Agent Queue has been updated: " + rawQueue.getId() + " for: " + agentId);
+        var queue = this._supervisedAgentQueueLoaded(agentId, teamId, rawQueue);
+        queue._events = rawQueue._events;
+    };
+
+    Finn.prototype._supervisedAgentQueueAdded = function (agentId, teamId, rawQueue) {
+        this.logger.log("Supervised Agent Queue added: " + rawQueue.getId() + " for: " + agentId);
+        var queue = this._supervisedAgentQueueLoaded(agentId, teamId, rawQueue);
+
+        var affectedAgent = this.teams[teamId].roster[agentId]
+        this.emit('supervised agent updated', affectedAgent);
+        affectedAgent.emit('updated', affectedAgent);
+    };
+
+    Finn.prototype._supervisedAgentQueueDeleted = function (agentId, teamId, rawQueue) {
+        var id = rawQueue.getId();
+        var name = rawQueue.getName();
+        this.logger.log("Supervised Agent Queue deleted " + id + " for " + agentId);
+
+        delete this.teams[teamId].roster[agentId].queues[id];
+
+        var affectedAgent = this.teams[teamId].roster[agentId]
+        this.emit('supervised agent updated', affectedAgent);
+        affectedAgent.emit('updated', affectedAgent);
+    };
+
+
+    function getAgentFromResponse(agentResponse) {
+        var agent = new Finn.Agent();
+
+        agent.id = agentResponse.getId();
+        agent.extension = agentResponse.getExtension();
+        agent.firstName = agentResponse.getFirstName();
+        agent.lastName = agentResponse.getLastName();
+        agent.pendingState = agentResponse.getPendingState();
+        agent.state = agentResponse.getState();
+        agent.prettyState = finesse.utilities.I18n.getString("desktop.agent.header.state." + agent.state);
+        agent.stateChangeTime = agentResponse.getStateChangeTime();
+        if (agentResponse.getData().reasonCode)
+            agent.reasonCode = agentResponse.getData().code;
+        else
+            agent.reasonCode = null;
+        agent.reasonCodeLabel = agentResponse.getReasonCodeLabel();
+        agent._raw = agentResponse;
+        
+        return agent;
+    }
+
+
+    Finn.prototype._supervisedAgentChanged = function (agent) {
+        this.logger.log("Supervised agent changed: " + agent.getId());
+        var agentToAdd = getAgentFromResponse(agent);
+        var affectedAgent, affectedTeamId;
+
+        $.each(this.teams, function (teamId, team) {
+            $.each(team.roster, function (agentId, teamAgent) {
+                if (teamAgent.id === agentToAdd.id) {
+                    affectedAgent = teamAgent;
+                    affectedTeamId = teamId;
+                }
+            });
+        });
+
+        this.logger.log(affectedAgent === undefined);
+        agentToAdd._events = affectedAgent._events;
+        agentToAdd.queues = affectedAgent.queues;
+        this.teams[affectedTeamId].roster[agentToAdd.id] = agentToAdd;
+        
+        this.emit('supervised agent updated', agentToAdd);
+        agentToAdd.emit('updated', agentToAdd);
+    }
+
+    Finn.prototype._teamRosterLoadError = function (err) {
+        this.logger.log("Team roster load error " + err);
+        console.error(err);
+    };
+
+    Finn.prototype._queuesLoaded = function (queuesResponse) {
+        var self = this;
+        this.logger.log("Queues loaded.");
+        this.queues = this.queues || {};
+        var rawQueues = queuesResponse.getCollection();
+        $.each(rawQueues, function (id, queue) {
+            self._queueLoadStatus = self._queueLoadStatus || {};
+            self._queueLoadStatus[id] = false;
+
+            queue.addHandler('change', self._queueChanged.bind(self));
+            queue.addHandler('load', self._queueLoaded.bind(self));
+        });
+    };
+
+    Finn.prototype._queueLoaded = function (rawQueue) {
+        this.logger.log("Queue loaded: " + rawQueue.getId());
+        var queue = getQueueFromResponse(rawQueue);
+        this.queues[queue.id] = queue;
+        this._queueLoadStatus[queue.id] = true;
+
+        if (!this.loaded && isLoaded(this._queueLoadStatus) && isLoaded(this._teamLoadStatus)) {
+            if (this.loadCallback)
+                this.loadCallback(null, this.agent);
+            this.loaded = true;
+        }
+
+        return queue;
+    };
+
+    Finn.prototype._queueAdded = function (queue) {
+        this.logger.log("Queue added.");
+        var newQueue = this._queueLoaded(queue);
+
+        this.emit('queue added', newQueue);
+    };
+
+    Finn.prototype._queueChanged = function (queue) {
+        this.logger.log("Queue has been updated.");
+        var changedQueue = this._queueLoaded(queue);
+        changedQueue._events = queue._events;
+
+        changedQueue.emit('updated')
+        this.emit('queue updated', changedQueue);
+    };
+
+    Finn.prototype._queueDeleted = function (queue) {
+        var id = queue.getId();
+        var name = queue.getName();
+        this.logger.log("Queue deleted " + id + " " + name);
+
+        this.queues[id].emit('deleted');
+
+        delete this.queues[id];
+        this.emit('queue deleted', id);
+    };
+
+    Finn.prototype._queueLoadError = function (err) {
+        this.logger.log("Queue load error " + err);
+        if (!this.loaded && this.loadCallback) {
+            this.loadCallback("Queue load error " + err);
+        }
+    };
+
+    function _resize() {
+
+        gadgets.window.adjustHeight(height);
+    }
+ 
+    function isLoaded(loadStatus) {
+        if (!loadStatus) {
+            return false;
+        }
+
+        var isLoaded = true;
+
+        $.each(loadStatus, function (id, status) {
+            if (status === false) {
+                isLoaded = false;
+            }
+        });
+
+        return isLoaded;
+    }
+
+    function getQueueFromResponse(queueResponse) {
+        var queue = new Finn.Queue();
+        queue.id = queueResponse.getId();
+        queue.name = queueResponse.getName();
+        queue.statistics = queueResponse.getStatistics();
+        queue._raw = queueResponse;
+
+        return queue;
+    }
+
+    function isSupervisor(user) {
+        return user._data.roles.role.indexOf("Supervisor") > -1
+    }
+
+	return Finn;
+
+}(jQuery));
+
+
+/**
+* Fix for awkward gadget 'onConnect' behavior.
+*
+* If we don't set onConnect right away, then it may never trigger.
+* This is because the way the gadget container code sets this callback is prone to race conditions.
+* Here is the relevant container code:
+*
+* 1.   gadgets.util.registerOnLoadHandler(function() {
+* 2.     try {
+* 3.       gadgets.Hub = new OpenAjax.hub.IframeHubClient(gadgets.HubSettings.params);
+* 4.       gadgets.Hub.connect(gadgets.HubSettings.onConnect)
+* 5.     } catch (A) {
+* 6.       gadgets.error("ERROR creating or connecting IframeHubClient in gadgets.Hub [" + A.message + "]")
+* 7.     }
+* 8.   })
+*
+* On line 4, the 'onConnect' callback is set immediately after the OpenSocial gadgets are loaded,
+* and captures the current value of 'HubSettings.onConnect' in a closure. The problem arises if we're 
+* loading this gadget after the OpenSocial gadget library has already loaded, for example if we're doing
+* our work after jquery's '$(document).ready' call. If we do that, then HubSettings.onConnect isn't set when
+* the OpenSocial container loads and so we'll never get the callback.
+*
+* This is inconvenient since it forces us to be finicky about when we actually load our gadget, making sure
+* that it happens immediately instead of after the document is loaded. This is not only prone to tricky
+* bugs but may conflict with our goals for the gadget. The fix below sets 'onConnect' immediately but redirects
+* it's logic to another function called 'onConnectHandler'. We can then set 'onConnectHandler' in our
+* gadget code without worrying too much about when we actually load it.
+*
+*/
+gadgets = gadgets || {};
+gadgets.HubSettings = gadgets.HubSettings || {};
+gadgets.HubSettings.onConnectHandler = function () {};
+gadgets.HubSettings.onConnect = function () {
+    gadgets.HubSettings.onConnectHandler();
+};
