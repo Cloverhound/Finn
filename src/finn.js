@@ -6,8 +6,11 @@
 Finn = (function ($) {
     'use strict';
 
-    function Finn(gadgetName) {
+    function Finn(gadgetName, options) {
+        options = options || {};
     	this.gadgetName = gadgetName;
+        this.loaded = false;
+        this.enableSupervisor = options.enableSupervisor === true;
     }
     heir.inherit(Finn, EventEmitter);
 
@@ -16,6 +19,9 @@ Finn = (function ($) {
 
     Finn.Queue = function() { }
     heir.inherit(Finn.Queue, EventEmitter);
+    
+    Finn.Call = function() { }
+    heir.inherit(Finn.Call, EventEmitter);
 
     Finn.prototype.load = function (callback) {
         this.loadCallback = callback;
@@ -39,11 +45,11 @@ Finn = (function ($) {
         this.logger = finesse.cslogger.ClientLogger;
         this.logger.init(gadgets.Hub, this.gadgetName);
         finesse.clientservices.ClientServices.setLogger(this.logger);
-        this.log = logger.log;
+        this.log = this.logger.log;
         this.log("The client logger has been initialized for the " + this.gadgetName + " gadget.");
 
         finesse.clientservices.ClientServices.registerOnConnectHandler(function() {
-            new finesse.restservices.User({
+            self.agent = new finesse.restservices.User({
                 id: finesse.gadget.Config.id,
                 onLoad: self._userLoaded.bind(self),
                 onError: self._userLoadError.bind(self),
@@ -66,9 +72,18 @@ Finn = (function ($) {
             onLoad: self._queuesLoaded.bind(self),
             onError: self._queueLoadError.bind(self)
         });
+        
+        // Get an instance of the dialogs collection and register handlers 
+        // for dialog additions and removals.
+        user.getDialogs({
+            onCollectionAdd: self._callStarted.bind(self),
+            onCollectionDelete: self._callEnded.bind(self),
+            onLoad: self._callsLoaded.bind(self),
+            onError: self._callsLoadError.bind(self)
+        });
 
         this.teams = {};
-        if (isSupervisor(user)) {
+        if (this.enableSupervisor && isSupervisor(user)) {
             // Array of objects with an id and name property
             // for each team supervised by the supervisor.
             var supervisedTeamList = user.getSupervisedTeams();
@@ -78,6 +93,11 @@ Finn = (function ($) {
 
                 self._loadTeam(team.id)
             });
+        }
+        else {
+            // With no teams listed in the load status, it will
+            // always be detected as completed loading.
+            self._teamLoadStatus = {};
         }
     };
 
@@ -96,9 +116,9 @@ Finn = (function ($) {
     };
 
     Finn.prototype._setupContainer = function () {
-        self.container = finesse.containerservices.ContainerServices.init();
-        self.container.addHandler(finesse.containerservices.ContainerServices.Topics.ACTIVE_TAB, self.emit.bind(self, 'tab active'));
-        self.container.makeActiveTabReq();
+        this.container = finesse.containerservices.ContainerServices.init();
+        this.container.addHandler(finesse.containerservices.ContainerServices.Topics.ACTIVE_TAB, this.emit.bind(this, 'tab active'));
+        this.container.makeActiveTabReq();
     }
 
     Finn.prototype._loadTeam = function (id) {
@@ -242,29 +262,6 @@ Finn = (function ($) {
         affectedAgent.emit('updated', affectedAgent);
     };
 
-
-    function getAgentFromResponse(agentResponse) {
-        var agent = new Finn.Agent();
-
-        agent.id = agentResponse.getId();
-        agent.extension = agentResponse.getExtension();
-        agent.firstName = agentResponse.getFirstName();
-        agent.lastName = agentResponse.getLastName();
-        agent.pendingState = agentResponse.getPendingState();
-        agent.state = agentResponse.getState();
-        agent.prettyState = finesse.utilities.I18n.getString("desktop.agent.header.state." + agent.state);
-        agent.stateChangeTime = agentResponse.getStateChangeTime();
-        if (agentResponse.getData().reasonCode)
-            agent.reasonCode = agentResponse.getData().code;
-        else
-            agent.reasonCode = null;
-        agent.reasonCodeLabel = agentResponse.getReasonCodeLabel();
-        agent._raw = agentResponse;
-        
-        return agent;
-    }
-
-
     Finn.prototype._supervisedAgentChanged = function (agent) {
         this.logger.log("Supervised agent changed: " + agent.getId());
         var agentToAdd = getAgentFromResponse(agent);
@@ -355,11 +352,58 @@ Finn = (function ($) {
             this.loadCallback("Queue load error " + err);
         }
     };
+    
+    Finn.prototype._callsLoaded = function (callsResponse) {
+        var self = this;
+        this.logger.log("Dialogs loaded.");
+        this.calls = this.calls || {};
+        var rawCalls = callsResponse.getCollection();
+        $.each(rawCalls, function (id, dialog) {
+            //queue.addHandler('change', self._queueChanged.bind(self));
+            //queue.addHandler('load', self._queueLoaded.bind(self));
+        });
+    };
+    
+    Finn.prototype._callsLoadError = function (err) {
+        this.logger.log("Call load error " + err);
+    };
+    
+    Finn.prototype._callLoaded = function (rawCall) {
+        this.logger.log("Call loaded: " + rawCall.getId());
+        var call = getCallFromResponse(rawCall);
+        this.calls[call.id] = call;
+        return call;
+    };
+    
+    Finn.prototype._callStarted = function (call) {
+        this.logger.log("Call added.");
+        var newCall = this._callLoaded(call);
 
-    function _resize() {
+        this.emit('call started', newCall);
+    };
 
-        gadgets.window.adjustHeight(height);
-    }
+    Finn.prototype._callChanged = function (queue) {
+        this.logger.log("Queue has been updated.");
+        var changedQueue = this._queueLoaded(queue);
+        changedQueue._events = queue._events;
+
+        changedQueue.emit('updated')
+        this.emit('queue updated', changedQueue);
+    };
+
+    Finn.prototype._callEnded = function (rawCall) {
+        var id = rawCall.getId();
+        //var name = queue.getName();
+        this.logger.log("Call ended " + id);
+        var call = getCallFromResponse(rawCall);
+        var originalCall = this.calls[call.id];
+        
+        call._events = originalCall._events;
+        call.emit('ended');
+
+        delete this.calls[id];
+        this.emit('call ended', call);
+    };
  
     function isLoaded(loadStatus) {
         if (!loadStatus) {
@@ -376,6 +420,25 @@ Finn = (function ($) {
 
         return isLoaded;
     }
+    
+    function getAgentFromResponse(agentResponse) {
+        var agent = new Finn.Agent();
+
+        agent.id = agentResponse.getId();
+        agent.extension = agentResponse.getExtension();
+        agent.firstName = agentResponse.getFirstName();
+        agent.lastName = agentResponse.getLastName();
+        agent.pendingState = agentResponse.getPendingState();
+        agent.state = getAgentState(agentResponse);
+        if (agentResponse.getData().reasonCode)
+            agent.reasonCode = agentResponse.getData().code;
+        else
+            agent.reasonCode = null;
+        agent.reasonCodeLabel = agentResponse.getReasonCodeLabel();
+        agent._raw = agentResponse;
+        
+        return agent;
+    }
 
     function getQueueFromResponse(queueResponse) {
         var queue = new Finn.Queue();
@@ -386,9 +449,35 @@ Finn = (function ($) {
 
         return queue;
     }
+    
+    function getCallFromResponse(callResponse) {
+        var call = new Finn.Call();
+        call.id = callResponse.getId();
+        call.state = callResponse.getData().state;
+        call.toAddress = callResponse.getData().toAddress;
+        call.fromAddress = callResponse.getData().fromAddress;
+        call._raw = callResponse;
+
+        return call;
+    }
 
     function isSupervisor(user) {
         return user._data.roles.role.indexOf("Supervisor") > -1
+    }
+    
+    function getAgentState(agent) {
+    	var state = agent.getState();
+        var prettyState = finesse.utilities.I18n.getString("desktop.agent.header.state." + state);
+        var reasonCodeLabel = agent.getReasonCodeLabel();
+        var reasonCodeId = agent.getNotReadyReasonCodeId();
+        var stateChangeTime = agent.getStateChangeTime();
+        return {
+            name: state,
+            pretty: prettyState,
+            reasonCodeId: reasonCodeId,
+            reasonCodeLabel: reasonCodeLabel,
+            startTime: stateChangeTime
+        };
     }
 
 	return Finn;
