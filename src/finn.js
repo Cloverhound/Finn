@@ -110,7 +110,7 @@ Finn = (function ($) {
     Finn.prototype._userLoadError = function (error) {
         console.error(error);
 
-        if (!loaded && this.loadCallback) {
+        if (!this.loaded && this.loadCallback) {
             this.loadCallback(error);
         }
     };
@@ -430,11 +430,6 @@ Finn = (function ($) {
         agent.lastName = agentResponse.getLastName();
         agent.pendingState = agentResponse.getPendingState();
         agent.state = getAgentState(agentResponse);
-        if (agentResponse.getData().reasonCode)
-            agent.reasonCode = agentResponse.getData().code;
-        else
-            agent.reasonCode = null;
-        agent.reasonCodeLabel = agentResponse.getReasonCodeLabel();
         agent._raw = agentResponse;
         
         return agent;
