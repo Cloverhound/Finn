@@ -19423,7 +19423,8 @@ Finn = (function ($) {
             pretty: prettyState,
             reasonCodeId: reasonCodeId,
             reasonCodeLabel: reasonCodeLabel,
-            startTime: stateChangeTime
+            startTime: new Date(finesse.utilities.Utilities.extractTime(stateChangeTime)),
+            startTimeString: stateChangeTime
         };
     }
 
