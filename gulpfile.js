@@ -9,7 +9,7 @@ gulp.task('combine-all-10.5.1-ES3', function() {
 			'lib/Finesse/finesse-config-10.5.1.js',
 			'lib/EventEmitter/EventEmitter.js',
 			'lib/EventEmitter/heir.js',
-			'src/finesse-devtools.js',
+			'src/finn-container.js',
 			'src/finn.js'
 		])
 		.pipe(concat('finn-all-10.5.1-ES3.js'))

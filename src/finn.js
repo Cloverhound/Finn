@@ -11,6 +11,7 @@ Finn = (function ($) {
     	this.gadgetName = gadgetName;
         this.loaded = false;
         this.enableSupervisor = options.enableSupervisor === true;
+        this.container = finesse.modules.ContainerTools;
     }
     heir.inherit(Finn, EventEmitter);
 
@@ -58,7 +59,7 @@ Finn = (function ($) {
         });
 
         finesse.clientservices.ClientServices.init(finesse.gadget.Config, false);
-        self._setupContainer();        
+        self.container.init();        
     };
 
     Finn.prototype._userLoaded = function (user) {
@@ -115,11 +116,12 @@ Finn = (function ($) {
         }
     };
 
-    Finn.prototype._setupContainer = function () {
+    /*Finn.prototype._setupContainer = function () {
+        this.con
         this.container = finesse.containerservices.ContainerServices.init();
         this.container.addHandler(finesse.containerservices.ContainerServices.Topics.ACTIVE_TAB, this.emit.bind(this, 'tab active'));
         this.container.makeActiveTabReq();
-    }
+    }*/
 
     Finn.prototype._loadTeam = function (id) {
         var self = this;
@@ -178,9 +180,9 @@ Finn = (function ($) {
         var self = this;
         this.logger.log("Team roster loaded " + teamId);
         var rawRoster = rosterResponse.getCollection();
+        this.teams[teamId]._rawUsersCollection = rawRoster;
+        
         var roster = {};
-        roster._raw = rawRoster;
-
         this.teams[teamId].roster = roster;
 
         $.each(rawRoster, function (agentId, agent) {
@@ -359,7 +361,7 @@ Finn = (function ($) {
         this.calls = this.calls || {};
         var rawCalls = callsResponse.getCollection();
         $.each(rawCalls, function (id, dialog) {
-            //queue.addHandler('change', self._queueChanged.bind(self));
+            dialog.addHandler('change', self._callChanged.bind(self));
             //queue.addHandler('load', self._queueLoaded.bind(self));
         });
     };
@@ -377,18 +379,19 @@ Finn = (function ($) {
     
     Finn.prototype._callStarted = function (call) {
         this.logger.log("Call added.");
+        call.addHandler('change', this._callChanged.bind(this));
         var newCall = this._callLoaded(call);
 
         this.emit('call started', newCall);
     };
 
-    Finn.prototype._callChanged = function (queue) {
-        this.logger.log("Queue has been updated.");
-        var changedQueue = this._queueLoaded(queue);
-        changedQueue._events = queue._events;
+    Finn.prototype._callChanged = function (call) {
+        this.logger.log("Call has been updated.");
+        var changedCall = this._callLoaded(call);
+        changedCall._events = call._events;
 
-        changedQueue.emit('updated')
-        this.emit('queue updated', changedQueue);
+        changedCall.emit('updated')
+        this.emit('call updated', changedCall);
     };
 
     Finn.prototype._callEnded = function (rawCall) {
@@ -404,6 +407,21 @@ Finn = (function ($) {
         delete this.calls[id];
         this.emit('call ended', call);
     };
+    
+    Finn.prototype.makeCall = function (number, callback) {
+        if (!callback || typeof callback !== "function") {
+            callback = function() {};
+        }
+        
+        if (!this.loaded) {
+            callback("Finesse not loaded.");
+        }
+        
+        this.agent._raw.makeCall(number, {
+            success: callback.bind(null, null),
+            error: callback
+        });
+    }
  
     function isLoaded(loadStatus) {
         if (!loadStatus) {
@@ -451,6 +469,15 @@ Finn = (function ($) {
         call.state = callResponse.getData().state;
         call.toAddress = callResponse.getData().toAddress;
         call.fromAddress = callResponse.getData().fromAddress;
+        call.type = callResponse.getMediaProperties().callType;
+        if (callResponse.getData().associatedDialogUri) {
+            call.parentCall = finesse.utilities.Utilities.getId(callResponse.getData().associatedDialogUri);
+        }
+        else {
+            call.parentCall = null;
+        }
+        call.participants = callResponse.getParticipants();
+
         call._raw = callResponse;
 
         return call;
