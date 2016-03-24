@@ -11,6 +11,7 @@ Finn = (function ($) {
     	this.gadgetName = gadgetName;
         this.loaded = false;
         this.enableSupervisor = options.enableSupervisor === true;
+        this.dontLoadRosters = options.dontLoadRosters === true;
         this.container = finesse.modules.ContainerTools;
     }
     heir.inherit(Finn, EventEmitter);
@@ -84,16 +85,20 @@ Finn = (function ($) {
         });
 
         this.teams = {};
-        if (this.enableSupervisor && isSupervisor(user)) {
-            // Array of objects with an id and name property
-            // for each team supervised by the supervisor.
-            var supervisedTeamList = user.getSupervisedTeams();
+        // Array of objects with an id and name property
+        // for each team supervised by the supervisor.
+        var supervisedTeamList = user.getSupervisedTeams();
+        if (this.enableSupervisor && isSupervisor(user) && supervisedTeamList.length > 0) {            
             $.each(supervisedTeamList, function(index, team) {
                 self._teamLoadStatus = self._teamLoadStatus || {};
                 self._teamLoadStatus[team.id] = false;
 
                 self._loadTeam(team.id)
             });
+
+            if (supervisedTeamList.length === 0) {
+                self._teamLoadStatus = {};
+            }
         }
         else {
             // With no teams listed in the load status, it will
@@ -148,6 +153,17 @@ Finn = (function ($) {
         var self = this;
         this.logger.log("Team loaded " + team.getId());
         this.emitEvent('team loaded', team);
+
+        if (this.dontLoadRosters) {
+            this._teamLoadStatus[team.getId()] = true;
+            if (!this.loaded && isLoaded(this._queueLoadStatus) && isLoaded(this._teamLoadStatus)) {
+                if (this.loadCallback)
+                    this.loadCallback(null, this.agent);
+                this.loaded = true;
+            }
+            
+            return;
+        }
 
         team._rawUsers = team.getUsers({
             onCollectionAdd: self._supervisedAgentAdded.bind(self, team.getId()),
@@ -448,6 +464,9 @@ Finn = (function ($) {
         agent.lastName = agentResponse.getLastName();
         agent.pendingState = agentResponse.getPendingState();
         agent.state = getAgentState(agentResponse);
+        agent.teamId = agentResponse.getTeamId();
+        agent.teamName = agentResponse.getTeamName();
+        agent.isSupervisor = isSupervisor(agentResponse);
         agent._raw = agentResponse;
         
         return agent;
