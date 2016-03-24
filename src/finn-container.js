@@ -92,6 +92,19 @@ finesse.modules.ContainerTools = (function ($) {
             return $("#finesse_gadget_" + this._containerServices.getMyGadgetId(), window.parent.document);
         },
 
+        hideGadget: function() {
+            this.getGadgetElement().hide();
+        },
+
+        showGadget: function() {
+            this.getGadgetElement().show();
+        },
+
+        getGadgetElement: function() {
+            this.init();
+            return $("#gadgets-gadget-content-" + this._containerServices.getMyGadgetId(), window.parent.document).parent();
+        },
+
         getGadgetTitleElement: function() {
             this.init();
             return $("#finesse_gadget_" + this._containerServices.getMyGadgetId() + "_title", window.parent.document);
@@ -126,6 +139,10 @@ finesse.modules.ContainerTools = (function ($) {
             debugPanel.append(gadgetId);
             debugPanel.append(reloadButton);
             this.getGadgetTitleElement().append(debugPanel);
+        },
+
+        showDialog: function(options) {
+            this._containerServices.showDialog(options);
         }
 
     };
