@@ -388,7 +388,7 @@ Finn = (function ($) {
     
     Finn.prototype._callLoaded = function (rawCall) {
         this.logger.log("Call loaded: " + rawCall.getId());
-        var call = getCallFromResponse(rawCall);
+        var call = getCallFromResponse(rawCall, this.calls);
         this.calls[call.id] = call;
         return call;
     };
@@ -414,7 +414,7 @@ Finn = (function ($) {
         var id = rawCall.getId();
         //var name = queue.getName();
         this.logger.log("Call ended " + id);
-        var call = getCallFromResponse(rawCall);
+        var call = getCallFromResponse(rawCall, this.calls);
         var originalCall = this.calls[call.id];
         
         call._events = originalCall._events;
@@ -482,7 +482,7 @@ Finn = (function ($) {
         return queue;
     }
     
-    function getCallFromResponse(callResponse) {
+    function getCallFromResponse(callResponse, calls) {
         var call = new Finn.Call();
         call.id = callResponse.getId();
         call.state = callResponse.getData().state;
@@ -490,7 +490,11 @@ Finn = (function ($) {
         call.fromAddress = callResponse.getData().fromAddress;
         call.type = callResponse.getMediaProperties().callType;
         if (callResponse.getData().associatedDialogUri) {
-            call.parentCall = finesse.utilities.Utilities.getId(callResponse.getData().associatedDialogUri);
+            var parentId = finesse.utilities.Utilities.getId(callResponse.getData().associatedDialogUri);
+            var parent = calls[parentid];
+            if (parent && !parent.parentCall) {
+                call.parentCall = parentId;
+            }
         }
         else {
             call.parentCall = null;
