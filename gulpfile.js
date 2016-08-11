@@ -4,7 +4,8 @@ var concat = require('gulp-concat');
 
 gulp.task('combine-all-10.5.1-ES3', function() {
 	return gulp.src([
-			'lib/es5-shim/*.js',
+			'lib/es5-shim/es5-shim.min.js',
+			'lib/es5-shim/es5-sham.min.js',
 			'lib/Finesse/finesse-10.5.1-ES3.js',
 			'lib/Finesse/finesse-config-10.5.1.js',
 			'lib/EventEmitter/EventEmitter.js',
