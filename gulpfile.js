@@ -21,3 +21,5 @@ gulp.task('combine-all-10.5.1-ES3', function() {
 gulp.task('watch', ['combine-all-10.5.1-ES3'], function () {
 	gulp.watch('src/**/*.js', ['combine-all-10.5.1-ES3']);
 });
+
+gulp.task('default', ['combine-all-10.5.1-ES3']);
