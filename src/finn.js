@@ -488,7 +488,16 @@ Finn = (function ($) {
         call.state = callResponse.getData().state;
         call.toAddress = callResponse.getData().toAddress;
         call.fromAddress = callResponse.getData().fromAddress;
-        call.type = callResponse.getMediaProperties().callType;
+		var mediaProperties = callResponse.getMediaProperties();
+        call.type = mediaProperties.callType;
+		call.data = {}
+		for(var property in mediaProperties) {
+		   if (property.lastIndexOf("callVariable", 0) != 0 && property.lastIndexOf("user.", 0) != 0) {
+			continue;
+		   }
+		   
+		   call.data[property] = mediaProperties[property];
+		}
         if (callResponse.getData().associatedDialogUri) {
             var parentId = finesse.utilities.Utilities.getId(callResponse.getData().associatedDialogUri);
             var parent = calls[parentid];
