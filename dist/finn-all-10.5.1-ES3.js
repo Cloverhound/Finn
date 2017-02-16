@@ -18802,9 +18802,8 @@ finesse.modules.ContainerTools = (function ($) {
     return {
 
         _containerServices: null,
-
         _tabBadge: null,
-
+		_tabButton: null,
         _initialized: false,
 
         init: function() {
@@ -18848,7 +18847,7 @@ finesse.modules.ContainerTools = (function ($) {
             }
             else {
                 this._tabBadge = $("<span class='badge' style='margin-left: 5px; padding: 1px 10px; padding-top: 3px; background-color: #0FA20F; color: white'>" + message + "</span>");
-                finesse.modules.DevTools.getTabLinkElement().append(this._tabBadge)
+                this.getTabLinkElement().append(this._tabBadge)
             }
         },
 
@@ -18856,6 +18855,25 @@ finesse.modules.ContainerTools = (function ($) {
             if (this._tabBadge) {
                 this._tabBadge.remove();
                 this._tabBadge = null;
+            }
+        },
+		
+		showTabButton: function(text, callback) {
+			if (this._tabButton) {
+                this._tabButton.html(text);
+				this._tabButton.click(callback);
+            }
+            else {
+                this._tabButton = $("<button class='btn btn-primary btn-xs' style='margin-left: 10px; padding: 1px 3px; top: -1px; height: 14px; position: relative; font-size: 11px; line-height: 5px'>" + text + "</button>");
+				this._tabButton.click(callback);
+				this.getTabLinkElement().append(this._tabButton)
+            }
+		},
+		
+		hideTabButton: function() {
+            if (this._tabButton) {
+                this._tabButton.remove();
+                this._tabButton = null;
             }
         },
 
@@ -18883,6 +18901,11 @@ finesse.modules.ContainerTools = (function ($) {
             this.init();
             return $("#finesse_gadget_" + this._containerServices.getMyGadgetId(), window.parent.document);
         },
+		
+		getGadgetFrameContainer: function() {
+			this.init();
+            return $("#finesse_gadget_" + this._containerServices.getMyGadgetId(), window.parent.document).parent().parent();
+		},
 
         hideGadget: function() {
             this.getGadgetElement().hide();
@@ -19430,7 +19453,16 @@ Finn = (function ($) {
         call.state = callResponse.getData().state;
         call.toAddress = callResponse.getData().toAddress;
         call.fromAddress = callResponse.getData().fromAddress;
-        call.type = callResponse.getMediaProperties().callType;
+		var mediaProperties = callResponse.getMediaProperties();
+        call.type = mediaProperties.callType;
+		call.data = {}
+		for(var property in mediaProperties) {
+		   if (property.lastIndexOf("callVariable", 0) != 0 && property.lastIndexOf("user.", 0) != 0) {
+			continue;
+		   }
+		   
+		   call.data[property] = mediaProperties[property];
+		}
         if (callResponse.getData().associatedDialogUri) {
             var parentId = finesse.utilities.Utilities.getId(callResponse.getData().associatedDialogUri);
             var parent = calls[parentid];
