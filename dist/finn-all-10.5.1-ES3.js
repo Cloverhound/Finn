@@ -19455,6 +19455,9 @@ Finn = (function ($) {
         call.fromAddress = callResponse.getData().fromAddress;
 		var mediaProperties = callResponse.getMediaProperties();
         call.type = mediaProperties.callType;
+        call.dnis = mediaProperties.DNIS;
+        call.dialedNumber = mediaProperties.dialedNumber;
+        call.outboundClassification = mediaProperties.outboundClassification;
 		call.data = {}
 		for(var property in mediaProperties) {
 			// We expect call variables to start with either 'callVariable' for peripheral call variables,
