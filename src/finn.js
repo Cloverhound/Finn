@@ -492,9 +492,14 @@ Finn = (function ($) {
         call.type = mediaProperties.callType;
 		call.data = {}
 		for(var property in mediaProperties) {
-		   if (property.lastIndexOf("callVariable", 0) != 0 && property.lastIndexOf("user.", 0) != 0) {
-			continue;
-		   }
+			// We expect call variables to start with either 'callVariable' for peripheral call variables,
+			// 'user' for custom ECC variables,
+			// or 'BA' for outbound ECC variables.
+			if (property.lastIndexOf("callVariable", 0) != 0 
+					&& property.lastIndexOf("user", 0) != 0
+					&& property.lastIndexOf("BA", 0) != 0) {
+				continue;
+			}
 		   
 		   call.data[property] = mediaProperties[property];
 		}

@@ -18861,11 +18861,11 @@ finesse.modules.ContainerTools = (function ($) {
 		showTabButton: function(text, callback) {
 			if (this._tabButton) {
                 this._tabButton.html(text);
-				this._tabButton.click(callback);
+				this._tabButton.off("click").on("click", callback);
             }
             else {
                 this._tabButton = $("<button class='btn btn-primary btn-xs' style='margin-left: 10px; padding: 1px 3px; top: -1px; height: 14px; position: relative; font-size: 11px; line-height: 5px'>" + text + "</button>");
-				this._tabButton.click(callback);
+				this._tabButton.on("click", callback);
 				this.getTabLinkElement().append(this._tabButton)
             }
 		},
@@ -19457,9 +19457,14 @@ Finn = (function ($) {
         call.type = mediaProperties.callType;
 		call.data = {}
 		for(var property in mediaProperties) {
-		   if (property.lastIndexOf("callVariable", 0) != 0 && property.lastIndexOf("user.", 0) != 0) {
-			continue;
-		   }
+			// We expect call variables to start with either 'callVariable' for peripheral call variables,
+			// 'user' for custom ECC variables,
+			// or 'BA' for outbound ECC variables.
+			if (property.lastIndexOf("callVariable", 0) != 0 
+					&& property.lastIndexOf("user", 0) != 0
+					&& property.lastIndexOf("BA", 0) != 0) {
+				continue;
+			}
 		   
 		   call.data[property] = mediaProperties[property];
 		}
