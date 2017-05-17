@@ -518,7 +518,7 @@ Finn = (function ($) {
 		}
         if (callResponse.getData().associatedDialogUri) {
             var parentId = finesse.utilities.Utilities.getId(callResponse.getData().associatedDialogUri);
-            var parent = calls[parentid];
+            var parent = calls[parentId];
             if (parent && !parent.parentCall) {
                 call.parentCall = parentId;
             }
