@@ -313,13 +313,23 @@ Finn = (function ($) {
         this.logger.log("Queues loaded.");
         this.queues = this.queues || {};
         var rawQueues = queuesResponse.getCollection();
-        $.each(rawQueues, function (id, queue) {
-            self._queueLoadStatus = self._queueLoadStatus || {};
-            self._queueLoadStatus[id] = false;
+        self._queueLoadStatus = self._queueLoadStatus || {};
 
-            queue.addHandler('change', self._queueChanged.bind(self));
-            queue.addHandler('load', self._queueLoaded.bind(self));
-        });
+        if (rawQueues.length == 0) {
+            if (!self.loaded && isLoaded(self._teamLoadStatus)) {
+                if (self.loadCallback)
+                    self.loadCallback(null, self.agent);
+                self.loaded = true;
+            }
+        }
+        else {
+            $.each(rawQueues, function (id, queue) {
+                self._queueLoadStatus[id] = false;
+
+                queue.addHandler('change', self._queueChanged.bind(self));
+                queue.addHandler('load', self._queueLoaded.bind(self));
+            });
+        }
     };
 
     Finn.prototype._queueLoaded = function (rawQueue) {
