@@ -24,6 +24,71 @@ Finn = (function ($) {
     
     Finn.Call = function() { }
     heir.inherit(Finn.Call, EventEmitter);
+    Finn.Call.prototype.makeConsultCall = function (number, callback) {
+        if (!callback || typeof callback !== "function") {
+            callback = function() {};
+        }
+        
+        if (!this.loaded) {
+            callback("Finesse not loaded.");
+        }
+        
+        this._raw.makeConsultCall(this._finn.agent.extension, number, {
+            success: callback.bind(null, null),
+            error: callback
+        });
+    }
+
+    Finn.Call.prototype.retrieve = function (callback) {
+        if (!callback || typeof callback !== "function") {
+            callback = function() {};
+        }
+        
+        if (!this.loaded) {
+            callback("Finesse not loaded.");
+        }
+        
+        this._raw.requestAction(this._finn.agent.extension, finesse.restservices.Dialog.Actions.RETRIEVE, {
+            success: callback.bind(null, null),
+            error: callback
+        });
+    }
+    Finn.Call.prototype.hold = function (callback) {
+        if (!callback || typeof callback !== "function") {
+            callback = function() {};
+        }
+        
+        if (!this.loaded) {
+            callback("Finesse not loaded.");
+        }
+        
+        this._raw.requestAction(this._finn.agent.extension, finesse.restservices.Dialog.Actions.HOLD, {
+            success: callback.bind(null, null),
+            error: callback
+        });
+    }
+    Finn.Call.prototype.updateCallVariable = function (variable, value) {
+        this._raw.isLoaded();
+
+        var options = options || {};
+        options.content = {};
+        options.content[this._raw.getRestType()] =
+        {
+            "mediaProperties": {
+                "callvariables": [
+                    { 
+                        "CallVariable": {
+                            "name": variable,
+                            "value": value
+                        }
+                    }
+                ]
+            },
+            "requestedAction": finesse.restservices.Dialog.Actions.UPDATE_CALL_DATA
+        };
+        options.method = "PUT";
+        this._raw.restRequest(this._raw.getRestUrl(), options);
+    },
 
     Finn.prototype.load = function (callback) {
         this.loadCallback = callback;
@@ -399,6 +464,7 @@ Finn = (function ($) {
     Finn.prototype._callLoaded = function (rawCall) {
         this.logger.log("Call loaded: " + rawCall.getId());
         var call = getCallFromResponse(rawCall, this.calls);
+        call._finn = this;
         this.calls[call.id] = call;
         return call;
     };
