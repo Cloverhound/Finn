@@ -1,6 +1,6 @@
 {
   "name": "Finn",
-  "version": "0.5.0",
+  "version": "0.9.17",
   "description": "Convenience library for Cisco Finesse.",
   "main": "index.js",
   "scripts": {
@@ -8,14 +8,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/edumansky/Finn.git"
+    "url": "https://github.com/Cloverhound/Finn.git"
   },
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "bugs": {
-    "url": "https://github.com/edumansky/Finn/issues"
+    "url": "https://github.com/Cloverhound/Finn/issues"
   },
-  "homepage": "https://github.com/edumansky/Finn",
+  "homepage": "https://github.com/Cloverhound/Finn",
   "devDependencies": {
     "gulp": "^3.9.0",
     "gulp-concat": "^2.6.0"
