@@ -133,6 +133,10 @@ finesse.modules.ContainerTools = (function ($) {
             return $("#finesse_gadget_" + this._containerServices.getMyGadgetId() + "_title", window.parent.document);
         },
 
+        hideGadgetTitle: function() {
+            this.getGadgetTitleElement().hide();
+        },
+
         reloadGadget: function () {
             this.init();
             // Find the 'url' parameter within this gadget iframe's query string.
