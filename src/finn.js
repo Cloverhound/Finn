@@ -125,20 +125,43 @@ Finn = (function ($) {
         });
 
         finesse.clientservices.ClientServices.init(finesse.gadget.Config, false);
-        self.container.init();        
+        self.container.init();
+        self.container.info = new finesse.restservices.SystemInfo("",{
+            onLoad: self._systemInfoLoaded.bind(self),
+            onChange: self._systemInfoChanged.bind(self)
+        });      
+    };
+
+    Finn.prototype._systemInfoLoaded = function (info) {
+        this.logger.log("System Info loaded.");
+
+        this.container.info = info._data;
+        this._systemInfoIsLoaded = true;
+        if (this._userIsLoaded) {
+            this._continueUserLoad(this.agent._raw);
+        }
+    };
+    Finn.prototype._systemInfoChanged = function (info) {
+        this.logger.log("System Info changed.");
+
+        this.container.info = info._data;
+        this._systemInfoIsLoaded = true;
     };
 
     Finn.prototype._userLoaded = function (user) {
         var self = this;
         this.logger.log("User loaded.");
-        this.agent = getAgentFromResponse(user);
 
-        user.getQueues({
-            onCollectionAdd: self._queueAdded.bind(self),
-            onCollectionDelete: self._queueDeleted.bind(self),
-            onLoad: self._queuesLoaded.bind(self),
-            onError: self._queueLoadError.bind(self)
-        });
+        this.agent = getAgentFromResponse(user);
+        this._userIsLoaded = true;
+        if (this._systemInfoIsLoaded) {
+            this._continueUserLoad(user)
+        }
+
+    };  
+
+    Finn.prototype._continueUserLoad = function (user) {
+        var self = this;
         
         // Get an instance of the dialogs collection and register handlers 
         // for dialog additions and removals.
@@ -170,7 +193,21 @@ Finn = (function ($) {
             // always be detected as completed loading.
             self._teamLoadStatus = {};
         }
-    };
+
+        // Queue subscription not supported in UCCX
+        if (self.container.info.deploymentType == "UCCX") {
+            self._queueLoadStatus = self._queueLoadStatus || {};
+
+            self._callbackIfLoaded();
+        } else {
+            user.getQueues({
+                onCollectionAdd: self._queueAdded.bind(self),
+                onCollectionDelete: self._queueDeleted.bind(self),
+                onLoad: self._queuesLoaded.bind(self),
+                onError: self._queueLoadError.bind(self)
+            })
+        }
+    }
 
     Finn.prototype._userChanged = function (user) {
         this.agent = getAgentFromResponse(user);
@@ -186,12 +223,6 @@ Finn = (function ($) {
         }
     };
 
-    /*Finn.prototype._setupContainer = function () {
-        this.con
-        this.container = finesse.containerservices.ContainerServices.init();
-        this.container.addHandler(finesse.containerservices.ContainerServices.Topics.ACTIVE_TAB, this.emit.bind(this, 'tab active'));
-        this.container.makeActiveTabReq();
-    }*/
 
     Finn.prototype._loadTeam = function (id) {
         var self = this;
@@ -212,7 +243,7 @@ Finn = (function ($) {
     Finn.prototype._teamChanged = function (team) {
         this.logger.log("Team changed " + team.getId());
         this._teamLoaded(team);
-    }
+    };
 
     Finn.prototype._teamLoaded = function (team) {
         var self = this;
