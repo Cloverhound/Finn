@@ -158,6 +158,14 @@ Finn = (function ($) {
             this._continueUserLoad(user)
         }
 
+        user.getNotReadyReasonCodes({
+            success: self._notReadyReasonCodesLoaded.bind(self),
+            error: self._notReadyReasonCodesLoadError.bind(self)
+        });
+        user.getSignoutReasonCodes({
+            success: self._signoutReasonCodesLoaded.bind(self),
+            error: self._signoutReasonCodesLoadError.bind(self)
+        });
     };  
 
     Finn.prototype._continueUserLoad = function (user) {
@@ -223,6 +231,39 @@ Finn = (function ($) {
         }
     };
 
+    Finn.prototype._notReadyReasonCodesLoaded = function (reasonCodes) {
+        this.logger.log("Not Ready Reason Codes loaded: " + reasonCodes);
+        this.notReadyReasonCodes = reasonCodes || [];
+
+        this._notReadyReasonCodesLoadStatus = true;
+        this._callbackIfLoaded();
+    };
+    Finn.prototype._notReadyReasonCodesLoadError = function (error) {
+        this.logger.log("Error loading Not Ready Reason Codes: " + error)
+        console.error("Error Loading Not Ready Reason Codes", error);
+
+        this.notReadyReasonCodes = [];
+
+        this._notReadyReasonCodesLoadStatus = true;
+        this._callbackIfLoaded();
+    };
+
+    Finn.prototype._signoutReasonCodesLoaded = function (reasonCodes) {
+        this.logger.log("Sign Out Reason Codes loaded: " + reasonCodes);
+        this.signoutReasonCodes = reasonCodes || [];
+
+        this._signoutReasonCodesLoadStatus = true;
+        this._callbackIfLoaded();
+    };
+    Finn.prototype._signoutReasonCodesLoadError = function (error) {
+        this.logger.log("Error loading Sign Out Reason Codes: " + error)
+        console.error("Error Loading Sign Out Reason Codes", error);
+
+        this.signoutReasonCodes = [];
+
+        this._signoutReasonCodesLoadStatus = true;
+        this._callbackIfLoaded();
+    };
 
     Finn.prototype._loadTeam = function (id) {
         var self = this;
@@ -252,11 +293,7 @@ Finn = (function ($) {
 
         if (this.dontLoadRosters) {
             this._teamLoadStatus[team.getId()] = true;
-            if (!this.loaded && isLoaded(this._queueLoadStatus) && isLoaded(this._teamLoadStatus)) {
-                if (this.loadCallback)
-                    this.loadCallback(null, this.agent);
-                this.loaded = true;
-            }
+            this._callbackIfLoaded();
             
             return;
         }
@@ -303,11 +340,7 @@ Finn = (function ($) {
         });
 
         this._teamLoadStatus[teamId] = true;
-        if (!this.loaded && isLoaded(this._queueLoadStatus) && isLoaded(this._teamLoadStatus)) {
-            if (this.loadCallback)
-                this.loadCallback(null, this.agent);
-            this.loaded = true;
-        }
+        this._callbackIfLoaded();
     };
 
     Finn.prototype._loadSupervisedAgent = function (agent, teamId, roster) {
@@ -412,11 +445,7 @@ Finn = (function ($) {
         self._queueLoadStatus = self._queueLoadStatus || {};
 
         if (rawQueues.length == 0) {
-            if (!self.loaded && isLoaded(self._teamLoadStatus)) {
-                if (self.loadCallback)
-                    self.loadCallback(null, self.agent);
-                self.loaded = true;
-            }
+            self._callbackIfLoaded();
         }
         else {
             $.each(rawQueues, function (id, queue) {
@@ -434,11 +463,7 @@ Finn = (function ($) {
         this.queues[queue.id] = queue;
         this._queueLoadStatus[queue.id] = true;
 
-        if (!this.loaded && isLoaded(this._queueLoadStatus) && isLoaded(this._teamLoadStatus)) {
-            if (this.loadCallback)
-                this.loadCallback(null, this.agent);
-            this.loaded = true;
-        }
+        this._callbackIfLoaded();
 
         return queue;
     };
@@ -544,6 +569,58 @@ Finn = (function ($) {
             success: callback.bind(null, null),
             error: callback
         });
+    }
+
+    Finn.prototype.ready = function () {
+        if (!this.loaded) {
+            callback("Finesse not loaded.");
+        }
+        
+        this.agent._raw.setState("READY");
+    }
+    Finn.prototype.notReady = function (reasonCodeId) {
+        if (!this.loaded) {
+            callback("Finesse not loaded.");
+        }
+
+        var reason = null;
+        if (reasonCodeId) {
+            reason = {
+                id: reasonCodeId
+            }
+        }
+        
+        this.agent._raw.setState("NOT_READY", reason);
+    }
+    Finn.prototype.logout = function (reasonCodeId) {
+        if (!this.loaded) {
+            callback("Finesse not loaded.");
+        }
+
+        var reason = null;
+        if (reasonCodeId) {
+            reason = {
+                id: reasonCodeId
+            }
+        }
+        
+        this.agent._raw.logout(reason);
+    }
+
+    Finn.prototype._isFullyLoaded = function () {
+        return (
+            isLoaded(this._queueLoadStatus) &&
+            isLoaded(this._teamLoadStatus) &&
+            this._notReadyReasonCodesLoadStatus &&
+            this._signoutReasonCodesLoadStatus
+        );
+    }
+    Finn.prototype._callbackIfLoaded = function () {
+        if (!this.loaded && this._isFullyLoaded()) {
+            if (this.loadCallback)
+                this.loadCallback(null, this.agent);
+            this.loaded = true;
+        }
     }
  
     function isLoaded(loadStatus) {
