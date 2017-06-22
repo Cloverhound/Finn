@@ -37,7 +37,52 @@ Finn = (function ($) {
             success: callback.bind(null, null),
             error: callback
         });
-    }
+    };
+
+    Finn.Call.prototype.directTransfer = function (number, callback) {
+        if (!callback || typeof callback !== "function") {
+            callback = function() {};
+        }
+        
+        if (!this.loaded) {
+            callback("Finesse not loaded.");
+        }
+        
+        this._raw.initiateDirectTransfer(this._finn.agent.extension, number, {
+            success: callback.bind(null, null),
+            error: callback
+        });
+    };
+
+    Finn.Call.prototype.completeTransfer = function (callback) {
+        if (!callback || typeof callback !== "function") {
+            callback = function() {};
+        }
+        
+        if (!this.loaded) {
+            callback("Finesse not loaded.");
+        }
+        
+        this._raw.requestAction(this._finn.agent.extension, "TRANSFER", {
+            success: callback.bind(null, null),
+            error: callback
+        });
+    };
+
+    Finn.Call.prototype.completeConference = function (callback) {
+        if (!callback || typeof callback !== "function") {
+            callback = function() {};
+        }
+        
+        if (!this.loaded) {
+            callback("Finesse not loaded.");
+        }
+        
+        this._raw.requestAction(this._finn.agent.extension, "CONFERENCE", {
+            success: callback.bind(null, null),
+            error: callback
+        });
+    };
 
     Finn.Call.prototype.retrieve = function (callback) {
         if (!callback || typeof callback !== "function") {
@@ -52,7 +97,8 @@ Finn = (function ($) {
             success: callback.bind(null, null),
             error: callback
         });
-    }
+    };
+
     Finn.Call.prototype.hold = function (callback) {
         if (!callback || typeof callback !== "function") {
             callback = function() {};
@@ -66,7 +112,8 @@ Finn = (function ($) {
             success: callback.bind(null, null),
             error: callback
         });
-    }
+    };
+
     Finn.Call.prototype.updateCallVariable = function (variable, value) {
         this._raw.isLoaded();
 
@@ -88,7 +135,33 @@ Finn = (function ($) {
         };
         options.method = "PUT";
         this._raw.restRequest(this._raw.getRestUrl(), options);
-    },
+    };
+
+    Finn.Call.prototype.updateCallVariables = function (variables, value) {
+        this._raw.isLoaded();
+
+        var callVariables = [];
+        for (var variableName in variables) {
+            callVariables.push({
+                "CallVariable": {
+                    "name": variableName,
+                    "value": variables[variableName]
+                }
+            });
+        }
+
+        var options = options || {};
+        options.content = {};
+        options.content[this._raw.getRestType()] =
+        {
+            "mediaProperties": {
+                "callvariables": callVariables
+            },
+            "requestedAction": finesse.restservices.Dialog.Actions.UPDATE_CALL_DATA
+        };
+        options.method = "PUT";
+        this._raw.restRequest(this._raw.getRestUrl(), options);
+    };
 
     Finn.prototype.load = function (callback) {
         this.loadCallback = callback;
