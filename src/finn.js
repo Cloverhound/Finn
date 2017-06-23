@@ -137,16 +137,14 @@ Finn = (function ($) {
         this._raw.restRequest(this._raw.getRestUrl(), options);
     };
 
-    Finn.Call.prototype.updateCallVariables = function (variables, value) {
+    Finn.Call.prototype.updateCallVariables = function (variables) {
         this._raw.isLoaded();
 
         var callVariables = [];
         for (var variableName in variables) {
             callVariables.push({
-                "CallVariable": {
-                    "name": variableName,
-                    "value": variables[variableName]
-                }
+                "name": variableName,
+                "value": variables[variableName]
             });
         }
 
@@ -155,7 +153,9 @@ Finn = (function ($) {
         options.content[this._raw.getRestType()] =
         {
             "mediaProperties": {
-                "callvariables": callVariables
+                "callvariables": {
+                    "CallVariable": callVariables
+                }
             },
             "requestedAction": finesse.restservices.Dialog.Actions.UPDATE_CALL_DATA
         };
