@@ -19497,7 +19497,7 @@ Finn = (function ($) {
         var rawQueues = queuesResponse.getCollection();
         self._queueLoadStatus = self._queueLoadStatus || {};
 
-        if (rawQueues.length == 0) {
+        if ($.isEmptyObject(rawQueues) || rawQueues.length == 0) {
             self._callbackIfLoaded();
         }
         else {
