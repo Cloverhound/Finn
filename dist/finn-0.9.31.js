@@ -1563,7 +1563,7 @@ Finn = (function ($) {
     }
 
     function isSupervisor(user) {
-        return user._data.roles.role.indexOf("Supervisor") > -1
+        return user._data.roles && user._data.roles.role && user._data.roles.role.indexOf("Supervisor") > -1
     }
     
     function getAgentState(agent) {
