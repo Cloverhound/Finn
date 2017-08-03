@@ -643,6 +643,18 @@ finesse.modules.ContainerTools = (function ($) {
             this._initialized = true;
         },
 
+        activateTab: function(tabId) {
+            this._containerServices.activateTab(tabId);
+        },
+
+        activateMyTab: function() {
+            this._containerServices.activateMyTab();
+        },
+
+        getMyTabId: function() {
+            return this._containerServices.getMyTabId();
+        },
+
         showTabBadge: function(message) {
             if (this._tabBadge) {
                 this._tabBadge.html(message);
