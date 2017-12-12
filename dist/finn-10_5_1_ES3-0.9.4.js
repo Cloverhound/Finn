@@ -19005,6 +19005,7 @@ Finn = (function ($) {
         this.enableSupervisor = options.enableSupervisor === true;
         this.dontLoadRosters = options.dontLoadRosters === true;
         this.container = finesse.modules.ContainerTools;
+        this.calls = {};
     }
     heir.inherit(Finn, EventEmitter);
 
@@ -19014,8 +19015,49 @@ Finn = (function ($) {
     Finn.Queue = function() { }
     heir.inherit(Finn.Queue, EventEmitter);
     
-    Finn.Call = function() { }
+    Finn.Call = function(finn) { 
+        this._finn = finn;
+    }
     heir.inherit(Finn.Call, EventEmitter);
+
+    Finn.Call.prototype._updateFromResponse = function (response) {
+        this.id = response.getId();
+        this.state = response.getData().state;
+        this.toAddress = response.getData().toAddress;
+        this.fromAddress = response.getData().fromAddress;
+        var mediaProperties = response.getMediaProperties();
+        this.type = mediaProperties.callType;
+        this.dnis = mediaProperties.DNIS;
+        this.dialedNumber = mediaProperties.dialedNumber;
+        this.outboundClassification = mediaProperties.outboundClassification;
+        this.data = {}
+        for(var property in mediaProperties) {
+            // We expect call variables to start with either 'callVariable' for peripheral call variables,
+            // 'user' for custom ECC variables,
+            // or 'BA' for outbound ECC variables.
+            if (property.lastIndexOf("callVariable", 0) != 0 
+                    && property.lastIndexOf("user", 0) != 0
+                    && property.lastIndexOf("BA", 0) != 0) {
+                continue;
+            }
+           
+           this.data[property] = mediaProperties[property];
+        }
+        if (response.getData().associatedDialogUri) {
+            var parentId = finesse.utilities.Utilities.getId(response.getData().associatedDialogUri);
+            var parent = this._finn.calls[parentId];
+            if (parent && !parent.parentCall) {
+                this.parentCall = parentId;
+            }
+        }
+        else {
+            this.parentCall = null;
+        }
+        this.participants = response.getParticipants();
+
+        this._raw = response;
+    };
+ 
     Finn.Call.prototype.makeConsultCall = function (number, callback) {
         if (!callback || typeof callback !== "function") {
             callback = function() {};
@@ -19285,6 +19327,8 @@ Finn = (function ($) {
     Finn.prototype._userChanged = function (user) {
         this.agent = getAgentFromResponse(user);
 
+        this.emit('agent_updated', this.agent);
+        // Deprecated
         this.emit('agent updated', this.agent);
     };
 
@@ -19354,6 +19398,9 @@ Finn = (function ($) {
     Finn.prototype._teamLoaded = function (team) {
         var self = this;
         this.logger.log("Team loaded " + team.getId());
+
+        this.emitEvent('team_loaded', team);
+        // Deprecated
         this.emitEvent('team loaded', team);
 
         if (this.dontLoadRosters) {
@@ -19380,6 +19427,8 @@ Finn = (function ($) {
         this.logger.log("Supervised agent deleted from team " + teamId);
 
         delete this.teams[teamId].roster[agent.getId()];
+        this.emit('supervised_agent_deleted', agent.getId());
+        // Deprecated
         this.emit('supervised agent deleted', agent.getId());
     };
 
@@ -19420,7 +19469,10 @@ Finn = (function ($) {
             onError: this._teamLoadError.bind(this)
         });
 
+        this.emit('supervised_agent_loaded', agentToAdd);
+        // Deprecated
         this.emit('supervised agent loaded', agentToAdd);
+
         agent.addHandler('change', this._supervisedAgentChanged.bind(this));
     };
 
@@ -19441,7 +19493,11 @@ Finn = (function ($) {
         this.teams[teamId].roster[agentId].queues[queue.id] = queue;
 
         var affectedAgent = this.teams[teamId].roster[agentId]
+        
+        this.emit('supervised_agent_updated', affectedAgent);
+        // Deprecated
         this.emit('supervised agent updated', affectedAgent);
+
         affectedAgent.emit('updated', affectedAgent);
 
         return queue;
@@ -19458,7 +19514,11 @@ Finn = (function ($) {
         var queue = this._supervisedAgentQueueLoaded(agentId, teamId, rawQueue);
 
         var affectedAgent = this.teams[teamId].roster[agentId]
+
+        this.emit('supervised_agent_updated', affectedAgent);
+        // Deprecated
         this.emit('supervised agent updated', affectedAgent);
+
         affectedAgent.emit('updated', affectedAgent);
     };
 
@@ -19470,7 +19530,11 @@ Finn = (function ($) {
         delete this.teams[teamId].roster[agentId].queues[id];
 
         var affectedAgent = this.teams[teamId].roster[agentId]
+
+        this.emit('supervised_agent_updated', affectedAgent);
+        // Deprecated
         this.emit('supervised agent updated', affectedAgent);
+
         affectedAgent.emit('updated', affectedAgent);
     };
 
@@ -19493,7 +19557,10 @@ Finn = (function ($) {
         agentToAdd.queues = affectedAgent.queues;
         this.teams[affectedTeamId].roster[agentToAdd.id] = agentToAdd;
         
+        this.emit('supervised_agent_updated', agentToAdd);
+        // Deprecated
         this.emit('supervised agent updated', agentToAdd);
+
         agentToAdd.emit('updated', agentToAdd);
     }
 
@@ -19537,6 +19604,8 @@ Finn = (function ($) {
         this.logger.log("Queue added.");
         var newQueue = this._queueLoaded(queue);
 
+        this.emit('queue_added', newQueue);
+        // Deprecated
         this.emit('queue added', newQueue);
     };
 
@@ -19546,6 +19615,9 @@ Finn = (function ($) {
         changedQueue._events = queue._events;
 
         changedQueue.emit('updated')
+
+        this.emit('queue_updated', changedQueue);
+        // Deprecated
         this.emit('queue updated', changedQueue);
     };
 
@@ -19557,6 +19629,9 @@ Finn = (function ($) {
         this.queues[id].emit('deleted');
 
         delete this.queues[id];
+
+        this.emit('queue_deleted', id);
+        // Deprecated
         this.emit('queue deleted', id);
     };
 
@@ -19582,42 +19657,45 @@ Finn = (function ($) {
         this.logger.log("Call load error " + err);
     };
     
-    Finn.prototype._callLoaded = function (rawCall) {
-        this.logger.log("Call loaded: " + rawCall.getId());
-        var call = getCallFromResponse(rawCall, this.calls);
-        call._finn = this;
+    Finn.prototype._loadCall = function (rawCall) {
+        this.logger.log("Loading call: " + rawCall.getId());
+        var call = this.calls[rawCall.getId()] || new Finn.Call(this);
+        call._updateFromResponse(rawCall);
         this.calls[call.id] = call;
         return call;
     };
     
-    Finn.prototype._callStarted = function (call) {
+    Finn.prototype._callStarted = function (rawCall) {
         this.logger.log("Call added.");
-        call.addHandler('change', this._callChanged.bind(this));
-        var newCall = this._callLoaded(call);
+        rawCall.addHandler('change', this._callChanged.bind(this));
+        var call = this._loadCall(rawCall);
 
-        this.emit('call started', newCall);
+        this.emit('call_started', call);
+        // Deprecated
+        this.emit('call started', call);
     };
 
-    Finn.prototype._callChanged = function (call) {
-        this.logger.log("Call has been updated.");
-        var changedCall = this._callLoaded(call);
-        changedCall._events = call._events;
+    Finn.prototype._callChanged = function (rawCall) {
+        var id = rawCall.getId();
+        this.logger.log("Call updated " + id);
+        var call = this._loadCall(rawCall);
 
-        changedCall.emit('updated')
-        this.emit('call updated', changedCall);
+        call.emit('updated')
+        this.emit('call_updated', call);
+        // Deprecated
+        this.emit('call updated', call);
     };
 
     Finn.prototype._callEnded = function (rawCall) {
         var id = rawCall.getId();
-        //var name = queue.getName();
         this.logger.log("Call ended " + id);
-        var call = getCallFromResponse(rawCall, this.calls);
-        var originalCall = this.calls[call.id];
+        var call = this._loadCall(rawCall);
         
-        call._events = originalCall._events;
         call.emit('ended');
-
         delete this.calls[id];
+
+        this.emit('call_ended', call);
+        // Deprecated
         this.emit('call ended', call);
     };
     
@@ -19687,7 +19765,7 @@ Finn = (function ($) {
             this.loaded = true;
         }
     }
- 
+
     function isLoaded(loadStatus) {
         if (!loadStatus) {
             return false;
@@ -19729,47 +19807,6 @@ Finn = (function ($) {
         queue._raw = queueResponse;
 
         return queue;
-    }
-    
-    function getCallFromResponse(callResponse, calls) {
-        var call = new Finn.Call();
-        call.id = callResponse.getId();
-        call.state = callResponse.getData().state;
-        call.toAddress = callResponse.getData().toAddress;
-        call.fromAddress = callResponse.getData().fromAddress;
-		var mediaProperties = callResponse.getMediaProperties();
-        call.type = mediaProperties.callType;
-        call.dnis = mediaProperties.DNIS;
-        call.dialedNumber = mediaProperties.dialedNumber;
-        call.outboundClassification = mediaProperties.outboundClassification;
-		call.data = {}
-		for(var property in mediaProperties) {
-			// We expect call variables to start with either 'callVariable' for peripheral call variables,
-			// 'user' for custom ECC variables,
-			// or 'BA' for outbound ECC variables.
-			if (property.lastIndexOf("callVariable", 0) != 0 
-					&& property.lastIndexOf("user", 0) != 0
-					&& property.lastIndexOf("BA", 0) != 0) {
-				continue;
-			}
-		   
-		   call.data[property] = mediaProperties[property];
-		}
-        if (callResponse.getData().associatedDialogUri) {
-            var parentId = finesse.utilities.Utilities.getId(callResponse.getData().associatedDialogUri);
-            var parent = calls[parentId];
-            if (parent && !parent.parentCall) {
-                call.parentCall = parentId;
-            }
-        }
-        else {
-            call.parentCall = null;
-        }
-        call.participants = callResponse.getParticipants();
-
-        call._raw = callResponse;
-
-        return call;
     }
 
     function isSupervisor(user) {

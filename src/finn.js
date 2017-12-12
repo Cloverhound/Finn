@@ -293,6 +293,8 @@ Finn = (function ($) {
     Finn.prototype._userChanged = function (user) {
         this.agent = getAgentFromResponse(user);
 
+        this.emit('agent_updated', this.agent);
+        // Deprecated
         this.emit('agent updated', this.agent);
     };
 
@@ -362,6 +364,9 @@ Finn = (function ($) {
     Finn.prototype._teamLoaded = function (team) {
         var self = this;
         this.logger.log("Team loaded " + team.getId());
+
+        this.emitEvent('team_loaded', team);
+        // Deprecated
         this.emitEvent('team loaded', team);
 
         if (this.dontLoadRosters) {
@@ -388,6 +393,8 @@ Finn = (function ($) {
         this.logger.log("Supervised agent deleted from team " + teamId);
 
         delete this.teams[teamId].roster[agent.getId()];
+        this.emit('supervised_agent_deleted', agent.getId());
+        // Deprecated
         this.emit('supervised agent deleted', agent.getId());
     };
 
@@ -428,7 +435,10 @@ Finn = (function ($) {
             onError: this._teamLoadError.bind(this)
         });
 
+        this.emit('supervised_agent_loaded', agentToAdd);
+        // Deprecated
         this.emit('supervised agent loaded', agentToAdd);
+
         agent.addHandler('change', this._supervisedAgentChanged.bind(this));
     };
 
@@ -449,7 +459,11 @@ Finn = (function ($) {
         this.teams[teamId].roster[agentId].queues[queue.id] = queue;
 
         var affectedAgent = this.teams[teamId].roster[agentId]
+        
+        this.emit('supervised_agent_updated', affectedAgent);
+        // Deprecated
         this.emit('supervised agent updated', affectedAgent);
+
         affectedAgent.emit('updated', affectedAgent);
 
         return queue;
@@ -466,7 +480,11 @@ Finn = (function ($) {
         var queue = this._supervisedAgentQueueLoaded(agentId, teamId, rawQueue);
 
         var affectedAgent = this.teams[teamId].roster[agentId]
+
+        this.emit('supervised_agent_updated', affectedAgent);
+        // Deprecated
         this.emit('supervised agent updated', affectedAgent);
+
         affectedAgent.emit('updated', affectedAgent);
     };
 
@@ -478,7 +496,11 @@ Finn = (function ($) {
         delete this.teams[teamId].roster[agentId].queues[id];
 
         var affectedAgent = this.teams[teamId].roster[agentId]
+
+        this.emit('supervised_agent_updated', affectedAgent);
+        // Deprecated
         this.emit('supervised agent updated', affectedAgent);
+
         affectedAgent.emit('updated', affectedAgent);
     };
 
@@ -501,7 +523,10 @@ Finn = (function ($) {
         agentToAdd.queues = affectedAgent.queues;
         this.teams[affectedTeamId].roster[agentToAdd.id] = agentToAdd;
         
+        this.emit('supervised_agent_updated', agentToAdd);
+        // Deprecated
         this.emit('supervised agent updated', agentToAdd);
+
         agentToAdd.emit('updated', agentToAdd);
     }
 
@@ -545,6 +570,8 @@ Finn = (function ($) {
         this.logger.log("Queue added.");
         var newQueue = this._queueLoaded(queue);
 
+        this.emit('queue_added', newQueue);
+        // Deprecated
         this.emit('queue added', newQueue);
     };
 
@@ -554,6 +581,9 @@ Finn = (function ($) {
         changedQueue._events = queue._events;
 
         changedQueue.emit('updated')
+
+        this.emit('queue_updated', changedQueue);
+        // Deprecated
         this.emit('queue updated', changedQueue);
     };
 
@@ -565,6 +595,9 @@ Finn = (function ($) {
         this.queues[id].emit('deleted');
 
         delete this.queues[id];
+
+        this.emit('queue_deleted', id);
+        // Deprecated
         this.emit('queue deleted', id);
     };
 
