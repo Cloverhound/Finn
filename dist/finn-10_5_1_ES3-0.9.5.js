@@ -19233,7 +19233,7 @@ Finn = (function ($) {
         this._raw.restRequest(this._raw.getRestUrl(), options);
     };
 
-    Finn.Call.prototype.sendDtmf = function (dtmf) {
+    Finn.Call.prototype.sendDtmf = function (dtmf, callback) {
         if (!callback || typeof callback !== "function") {
             callback = function() {};
         }
