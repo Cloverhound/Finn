@@ -2,10 +2,10 @@
  * @fileOverview Finesse container tools
  */
 
-var finesse = finesse || {};
-finesse.modules = finesse.modules || {};
+window.finesse = window.finesse || {};
+window.finesse.modules = window.finesse.modules || {};
 
-finesse.modules.ContainerTools = (function ($) {
+window.finesse.modules.ContainerTools = (function ($) {
 
     return {
 
@@ -153,8 +153,8 @@ finesse.modules.ContainerTools = (function ($) {
             this.init();
             // Find the 'url' parameter within this gadget iframe's query string.
             // That will equal the URL configured for this gadget in the layout.
-            parameters = (new RegExp('[?&]'+encodeURIComponent('url')+'=([^&]*)')).exec(location.search);
-            url = decodeURIComponent(parameters[1]);
+            var parameters = (new RegExp('[?&]'+encodeURIComponent('url')+'=([^&]*)')).exec(location.search);
+            var url = decodeURIComponent(parameters[1]);
 
             // Adds a cache buster to force Finesse to reload the gadget from the URL.
             if (url.indexOf("?") > -1)

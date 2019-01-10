@@ -1,8 +1,9 @@
 {
   "name": "Finn",
-  "version": "0.9.5",
+  "version": "0.9.7",
   "description": "Convenience library for Cisco Finesse.",
-  "main": "index.js",
+  "main": "src/finn.js",
+  "types": "src/finn.d.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -17,7 +18,14 @@
   },
   "homepage": "https://github.com/Cloverhound/Finn",
   "devDependencies": {
+    "babel-core": "^6.26.0",
+    "babel-plugin-transform-es2015-modules-umd": "^6.24.1",
+    "babel-preset-env": "^1.6.1",
     "gulp": "^3.9.0",
+    "gulp-babel": "^7.0.1",
     "gulp-concat": "^2.6.0"
+  },
+  "dependencies": {
+    "wolfy87-eventemitter": "^5.2.4"
   }
 }

@@ -1,262 +1,35 @@
+import EventEmitter from '../lib/EventEmitter/EventEmitter'
+
+import { Call } from './call';
+import { Agent } from './agent';
+import { Queue } from './queue';
+import { Channel } from './mediachannel';
 
 /**
 * Convenience library wrapping the Finesse API.
 * Let's you build gadgets with less boilerplate.
 */
-Finn = (function ($) {
-    'use strict';
+export class Finn extends EventEmitter {
 
-    function Finn(gadgetName, options) {
+    constructor(gadgetName, options) {
+        super();
+
         options = options || {};
-    	this.gadgetName = gadgetName;
+        this.gadgetName = gadgetName;
         this.loaded = false;
+        this.enableTaskRouting = options.enableTaskRouting === true;
+        this.mediaOptions = options.mediaOptions || {
+            maxDialogLimit: 3,
+            interruptAction: 'ACCEPT',
+            dialogLogoutAction: 'CLOSE'
+        }
         this.enableSupervisor = options.enableSupervisor === true;
         this.dontLoadRosters = options.dontLoadRosters === true;
         this.container = finesse.modules.ContainerTools;
         this.calls = {};
     }
-    heir.inherit(Finn, EventEmitter);
 
-    Finn.Agent = function(finn) {
-        this._finn = finn;
-    }
-    heir.inherit(Finn.Agent, EventEmitter);
-
-    /**
-     * Update our version of the agent object using a response from the raw
-     * Finesse API.
-     */
-    Finn.Agent.prototype._updateFromResponse = function (response) {
-        this.id = response.getId();
-        this.extension = response.getExtension();
-        this.firstName = response.getFirstName();
-        this.lastName = response.getLastName();
-        this.pendingState = response.getPendingState();
-        this.state = getAgentState(response);
-        this.teamId = response.getTeamId();
-        this.teamName = response.getTeamName();
-        this.isSupervisor = isSupervisor(response);
-        this._raw = response;
-    };
-
-    Finn.Queue = function(finn) {
-        this._finn = finn;
-    }
-    heir.inherit(Finn.Queue, EventEmitter);
-
-    /**
-     * Update our version of the queue object using a response from the raw
-     * Finesse API.
-     */
-    Finn.Queue.prototype._updateFromResponse = function (response) {
-        this.id = response.getId();
-        this.name = response.getName();
-        this.statistics = response.getStatistics();
-        this._raw = response;
-    }
-    
-    Finn.Call = function(finn) { 
-        this._finn = finn;
-    }
-    heir.inherit(Finn.Call, EventEmitter);
-
-    /**
-     * Update our version of the call object using a response from the raw
-     * Finesse API.
-     */
-    Finn.Call.prototype._updateFromResponse = function (response) {
-        this.id = response.getId();
-        this.state = response.getData().state;
-        this.toAddress = response.getData().toAddress;
-        this.fromAddress = response.getData().fromAddress;
-        var mediaProperties = response.getMediaProperties();
-        this.type = mediaProperties.callType;
-        this.dnis = mediaProperties.DNIS;
-        this.dialedNumber = mediaProperties.dialedNumber;
-        this.outboundClassification = mediaProperties.outboundClassification;
-        this.data = {}
-        for(var property in mediaProperties) {
-            // We expect call variables to start with either 'callVariable' for peripheral call variables,
-            // 'user' for custom ECC variables,
-            // or 'BA' for outbound ECC variables.
-            if (property.lastIndexOf("callVariable", 0) != 0 
-                    && property.lastIndexOf("user", 0) != 0
-                    && property.lastIndexOf("BA", 0) != 0) {
-                continue;
-            }
-           
-           this.data[property] = mediaProperties[property];
-        }
-        if (response.getData().associatedDialogUri) {
-            var parentId = finesse.utilities.Utilities.getId(response.getData().associatedDialogUri);
-            var parent = this._finn.calls[parentId];
-            if (parent && !parent.parentCall) {
-                this.parentCall = parentId;
-            }
-        }
-        else {
-            this.parentCall = null;
-        }
-        this.participants = response.getParticipants();
-
-        this._raw = response;
-    };
- 
-    Finn.Call.prototype.makeConsultCall = function (number, callback) {
-        if (!callback || typeof callback !== "function") {
-            callback = function() {};
-        }
-        
-        if (!this.loaded) {
-            callback("Finesse not loaded.");
-        }
-        
-        this._raw.makeConsultCall(this._finn.agent.extension, number, {
-            success: callback.bind(null, null),
-            error: callback
-        });
-    };
-
-    Finn.Call.prototype.directTransfer = function (number, callback) {
-        if (!callback || typeof callback !== "function") {
-            callback = function() {};
-        }
-        
-        if (!this.loaded) {
-            callback("Finesse not loaded.");
-        }
-        
-        this._raw.initiateDirectTransfer(this._finn.agent.extension, number, {
-            success: callback.bind(null, null),
-            error: callback
-        });
-    };
-
-    Finn.Call.prototype.completeTransfer = function (callback) {
-        if (!callback || typeof callback !== "function") {
-            callback = function() {};
-        }
-        
-        if (!this.loaded) {
-            callback("Finesse not loaded.");
-        }
-        
-        this._raw.requestAction(this._finn.agent.extension, "TRANSFER", {
-            success: callback.bind(null, null),
-            error: callback
-        });
-    };
-
-    Finn.Call.prototype.completeConference = function (callback) {
-        if (!callback || typeof callback !== "function") {
-            callback = function() {};
-        }
-        
-        if (!this.loaded) {
-            callback("Finesse not loaded.");
-        }
-        
-        this._raw.requestAction(this._finn.agent.extension, "CONFERENCE", {
-            success: callback.bind(null, null),
-            error: callback
-        });
-    };
-
-    Finn.Call.prototype.retrieve = function (callback) {
-        if (!callback || typeof callback !== "function") {
-            callback = function() {};
-        }
-        
-        if (!this.loaded) {
-            callback("Finesse not loaded.");
-        }
-        
-        this._raw.requestAction(this._finn.agent.extension, finesse.restservices.Dialog.Actions.RETRIEVE, {
-            success: callback.bind(null, null),
-            error: callback
-        });
-    };
-
-    Finn.Call.prototype.hold = function (callback) {
-        if (!callback || typeof callback !== "function") {
-            callback = function() {};
-        }
-        
-        if (!this.loaded) {
-            callback("Finesse not loaded.");
-        }
-        
-        this._raw.requestAction(this._finn.agent.extension, finesse.restservices.Dialog.Actions.HOLD, {
-            success: callback.bind(null, null),
-            error: callback
-        });
-    };
-
-    Finn.Call.prototype.updateCallVariable = function (variable, value) {
-        this._raw.isLoaded();
-
-        var options = options || {};
-        options.content = {};
-        options.content[this._raw.getRestType()] =
-        {
-            "mediaProperties": {
-                "callvariables": [
-                    { 
-                        "CallVariable": {
-                            "name": variable,
-                            "value": value
-                        }
-                    }
-                ]
-            },
-            "requestedAction": finesse.restservices.Dialog.Actions.UPDATE_CALL_DATA
-        };
-        options.method = "PUT";
-        this._raw.restRequest(this._raw.getRestUrl(), options);
-    };
-
-    Finn.Call.prototype.updateCallVariables = function (variables) {
-        this._raw.isLoaded();
-
-        var callVariables = [];
-        for (var variableName in variables) {
-            callVariables.push({
-                "name": variableName,
-                "value": variables[variableName]
-            });
-        }
-
-        var options = options || {};
-        options.content = {};
-        options.content[this._raw.getRestType()] =
-        {
-            "mediaProperties": {
-                "callvariables": {
-                    "CallVariable": callVariables
-                }
-            },
-            "requestedAction": finesse.restservices.Dialog.Actions.UPDATE_CALL_DATA
-        };
-        options.method = "PUT";
-        this._raw.restRequest(this._raw.getRestUrl(), options);
-    };
-
-    Finn.Call.prototype.sendDtmf = function (dtmf, callback) {
-        if (!callback || typeof callback !== "function") {
-            callback = function() {};
-        }
-        
-        if (!this.loaded) {
-            callback("Finesse not loaded.");
-        }
-        
-        this._raw.sendDTMFRequest(this._finn.agent.extension, {
-            success: callback.bind(null, null),
-            error: callback
-        }, dtmf);
-    };
-
-    Finn.prototype.load = function (callback) {
+    load(callback) {
         this.loadCallback = callback;
 
         console.log("Initializing gadget " + this.gadgetName);
@@ -271,7 +44,7 @@ Finn = (function ($) {
         }
     };
 
-    Finn.prototype._finishLoad = function () {
+    _finishLoad() {
         var self = this;
         console.log("Connected to gadget hub, continuing loading " + this.gadgetName);
 
@@ -282,7 +55,7 @@ Finn = (function ($) {
         this.log("The client logger has been initialized for the " + this.gadgetName + " gadget.");
 
         finesse.clientservices.ClientServices.registerOnConnectHandler(function() {
-            self.agent = new Finn.Agent(self)
+            self.agent = new Agent(self)
             self.agent._raw = new finesse.restservices.User({
                 id: finesse.gadget.Config.id,
                 onLoad: self._userLoaded.bind(self),
@@ -299,7 +72,7 @@ Finn = (function ($) {
         });      
     };
 
-    Finn.prototype._systemInfoLoaded = function (info) {
+    _systemInfoLoaded(info) {
         this.logger.log("System Info loaded.");
 
         this.container.info = info._data;
@@ -308,14 +81,14 @@ Finn = (function ($) {
             this._continueUserLoad(this.agent._raw);
         }
     };
-    Finn.prototype._systemInfoChanged = function (info) {
+    _systemInfoChanged(info) {
         this.logger.log("System Info changed.");
 
         this.container.info = info._data;
         this._systemInfoIsLoaded = true;
     };
 
-    Finn.prototype._userLoaded = function (user) {
+    _userLoaded(user) {
         var self = this;
         this.logger.log("User loaded.");
 
@@ -336,7 +109,7 @@ Finn = (function ($) {
         });
     };  
 
-    Finn.prototype._continueUserLoad = function (user) {
+    _continueUserLoad(user) {
         var self = this;
         
         // Get an instance of the dialogs collection and register handlers 
@@ -352,7 +125,7 @@ Finn = (function ($) {
         // Array of objects with an id and name property
         // for each team supervised by the supervisor.
         var supervisedTeamList = user.getSupervisedTeams();
-        if (this.enableSupervisor && isSupervisor(user) && supervisedTeamList.length > 0) {            
+        if (this.enableSupervisor && this._isSupervisor(user) && supervisedTeamList.length > 0) {            
             $.each(supervisedTeamList, function(index, team) {
                 self._teamLoadStatus = self._teamLoadStatus || {};
                 self._teamLoadStatus[team.id] = false;
@@ -373,7 +146,6 @@ Finn = (function ($) {
         // Queue subscription not supported in UCCX
         if (self.container.info.deploymentType == "UCCX") {
             self._queueLoadStatus = self._queueLoadStatus || {};
-
             self._callbackIfLoaded();
         } else {
             user.getQueues({
@@ -383,9 +155,20 @@ Finn = (function ($) {
                 onError: self._queueLoadError.bind(self)
             })
         }
+
+        if (this.enableTaskRouting) {
+            this.channels = {};
+            user.getMediaList({
+                onLoad: self._mediaListLoaded.bind(self)
+               // onError: self._mediaLoadError.bind(self)
+            })
+        } else {
+            self._mediaLoadStatus = self._mediaLoadStatus || {};
+            self._callbackIfLoaded();
+        }
     }
 
-    Finn.prototype._userChanged = function (user) {
+    _userChanged(user) {
         this.agent._updateFromResponse(user);
 
         this.emit('agent_updated', this.agent);
@@ -393,7 +176,7 @@ Finn = (function ($) {
         this.emit('agent updated', this.agent);
     };
 
-    Finn.prototype._userLoadError = function (error) {
+    _userLoadError(error) {
         console.error(error);
 
         if (!this.loaded && this.loadCallback) {
@@ -401,14 +184,14 @@ Finn = (function ($) {
         }
     };
 
-    Finn.prototype._notReadyReasonCodesLoaded = function (reasonCodes) {
+    _notReadyReasonCodesLoaded(reasonCodes) {
         this.logger.log("Not Ready Reason Codes loaded: " + reasonCodes);
         this.notReadyReasonCodes = reasonCodes || [];
 
         this._notReadyReasonCodesLoadStatus = true;
         this._callbackIfLoaded();
     };
-    Finn.prototype._notReadyReasonCodesLoadError = function (error) {
+    _notReadyReasonCodesLoadError(error) {
         this.logger.log("Error loading Not Ready Reason Codes: " + error)
         console.error("Error Loading Not Ready Reason Codes", error);
 
@@ -418,14 +201,14 @@ Finn = (function ($) {
         this._callbackIfLoaded();
     };
 
-    Finn.prototype._signoutReasonCodesLoaded = function (reasonCodes) {
+    _signoutReasonCodesLoaded(reasonCodes) {
         this.logger.log("Sign Out Reason Codes loaded: " + reasonCodes);
         this.signoutReasonCodes = reasonCodes || [];
 
         this._signoutReasonCodesLoadStatus = true;
         this._callbackIfLoaded();
     };
-    Finn.prototype._signoutReasonCodesLoadError = function (error) {
+    _signoutReasonCodesLoadError(error) {
         this.logger.log("Error loading Sign Out Reason Codes: " + error)
         console.error("Error Loading Sign Out Reason Codes", error);
 
@@ -435,7 +218,7 @@ Finn = (function ($) {
         this._callbackIfLoaded();
     };
 
-    Finn.prototype._loadTeam = function (id) {
+    _loadTeam(id) {
         var self = this;
         this.logger.log("Loading Team: " + id);
         if (this.teams[id]) { // If we've previously constructed this team already, simply refresh it.
@@ -451,12 +234,12 @@ Finn = (function ($) {
         }
     };
 
-    Finn.prototype._teamChanged = function (team) {
+    _teamChanged(team) {
         this.logger.log("Team changed " + team.getId());
         this._teamLoaded(team);
     };
 
-    Finn.prototype._teamLoaded = function (team) {
+    _teamLoaded(team) {
         var self = this;
         this.logger.log("Team loaded " + team.getId());
 
@@ -479,12 +262,12 @@ Finn = (function ($) {
         });
     };
 
-    Finn.prototype._teamLoadError = function (err) {
+    _teamLoadError(err) {
         this.logger.log("Team load error " + err);
         console.error(err);
     };
 
-    Finn.prototype._supervisedAgentDeleted = function (teamId, agent) {
+    _supervisedAgentDeleted(teamId, agent) {
         this.logger.log("Supervised agent deleted from team " + teamId);
 
         delete this.teams[teamId].roster[agent.getId()];
@@ -493,14 +276,14 @@ Finn = (function ($) {
         this.emit('supervised agent deleted', agent.getId());
     };
 
-    Finn.prototype._supervisedAgentAdded = function (teamId, agent) {
+    _supervisedAgentAdded(teamId, agent) {
         this.logger.log("Supervised agent added to team " + teamId);
 
         var roster = this.teams[teamId].roster;
         this._loadSupervisedAgent(agent, teamId, roster);
     };
 
-    Finn.prototype._teamRosterLoaded = function (teamId, rosterResponse) {
+    _teamRosterLoaded(teamId, rosterResponse) {
         var self = this;
         this.logger.log("Team roster loaded " + teamId);
         var rawRoster = rosterResponse.getCollection();
@@ -518,9 +301,9 @@ Finn = (function ($) {
         this._callbackIfLoaded();
     };
 
-    Finn.prototype._loadSupervisedAgent = function (agent, teamId, roster) {
+    _loadSupervisedAgent(agent, teamId, roster) {
         var agentId = agent.getId();
-        var agentToAdd = new Finn.Agent(this);
+        var agentToAdd = new Agent(this);
         agentToAdd._updateFromResponse(agent);
         roster[agentId] = agentToAdd;
 
@@ -538,7 +321,7 @@ Finn = (function ($) {
         agent.addHandler('change', this._supervisedAgentChanged.bind(this));
     };
 
-    Finn.prototype._supervisedAgentQueueListLoaded = function (agentId, teamId, queuesResponse) {
+    _supervisedAgentQueueListLoaded(agentId, teamId, queuesResponse) {
         var self = this;
         this.logger.log("Queues loaded for supervised agent: " + agentId);
         this.teams[teamId].roster[agentId].queues = this.teams[teamId].roster[agentId].queues || {};
@@ -549,9 +332,9 @@ Finn = (function ($) {
         });
     };
 
-    Finn.prototype._supervisedAgentQueueLoaded = function (agentId, teamId, rawQueue) {
+    _supervisedAgentQueueLoaded(agentId, teamId, rawQueue) {
         this.logger.log("Supervised Agent Queue loaded: " + rawQueue.getId() + " for: " + agentId);
-        var queue = new Finn.Queue(this);
+        var queue = new Queue(this);
         queue._updateFromResponse(rawQueue);
         this.teams[teamId].roster[agentId].queues[queue.id] = queue;
 
@@ -566,13 +349,13 @@ Finn = (function ($) {
         return queue;
     };
 
-    Finn.prototype._supervisedAgentQueueChanged = function (agentId, teamId, rawQueue) {
+    _supervisedAgentQueueChanged(agentId, teamId, rawQueue) {
         this.logger.log("Supervised Agent Queue has been updated: " + rawQueue.getId() + " for: " + agentId);
         var queue = this._supervisedAgentQueueLoaded(agentId, teamId, rawQueue);
         queue._events = rawQueue._events;
     };
 
-    Finn.prototype._supervisedAgentQueueAdded = function (agentId, teamId, rawQueue) {
+    _supervisedAgentQueueAdded(agentId, teamId, rawQueue) {
         this.logger.log("Supervised Agent Queue added: " + rawQueue.getId() + " for: " + agentId);
         var queue = this._supervisedAgentQueueLoaded(agentId, teamId, rawQueue);
 
@@ -585,7 +368,7 @@ Finn = (function ($) {
         affectedAgent.emit('updated', affectedAgent);
     };
 
-    Finn.prototype._supervisedAgentQueueDeleted = function (agentId, teamId, rawQueue) {
+    _supervisedAgentQueueDeleted(agentId, teamId, rawQueue) {
         var id = rawQueue.getId();
         var name = rawQueue.getName();
         this.logger.log("Supervised Agent Queue deleted " + id + " for " + agentId);
@@ -601,7 +384,7 @@ Finn = (function ($) {
         affectedAgent.emit('updated', affectedAgent);
     };
 
-    Finn.prototype._supervisedAgentChanged = function (agent) {
+    _supervisedAgentChanged(agent) {
         this.logger.log("Supervised agent changed: " + agent.getId());
         var affectedAgent, affectedTeamId;
 
@@ -630,12 +413,12 @@ Finn = (function ($) {
         affectedAgent.emit('updated', affectedAgent);
     }
 
-    Finn.prototype._teamRosterLoadError = function (err) {
+    _teamRosterLoadError(err) {
         this.logger.log("Team roster load error " + err);
         console.error(err);
     };
 
-    Finn.prototype._queuesLoaded = function (queuesResponse) {
+    _queuesLoaded(queuesResponse) {
         var self = this;
         this.logger.log("Queues loaded.");
         this.queues = this.queues || {};
@@ -655,10 +438,10 @@ Finn = (function ($) {
         }
     };
 
-    Finn.prototype._queueLoaded = function (rawQueue) {
+    _queueLoaded(rawQueue) {
         this.logger.log("Queue loaded: " + rawQueue.getId());
 
-        var queue = this.queues[rawQueue.getId()] || new Finn.Queue(this);
+        var queue = this.queues[rawQueue.getId()] || new Queue(this);
         queue._updateFromResponse(rawQueue);
         this.queues[queue.id] = queue;
 
@@ -668,7 +451,7 @@ Finn = (function ($) {
         return queue;
     };
 
-    Finn.prototype._queueAdded = function (queue) {
+    _queueAdded(queue) {
         this.logger.log("Queue added.");
         var newQueue = this._queueLoaded(queue);
 
@@ -677,7 +460,7 @@ Finn = (function ($) {
         this.emit('queue added', newQueue);
     };
 
-    Finn.prototype._queueChanged = function (queue) {
+    _queueChanged(queue) {
         this.logger.log("Queue has been updated.");
         var changedQueue = this._queueLoaded(queue);
         changedQueue._events = queue._events;
@@ -689,7 +472,7 @@ Finn = (function ($) {
         this.emit('queue updated', changedQueue);
     };
 
-    Finn.prototype._queueDeleted = function (queue) {
+    _queueDeleted(queue) {
         var id = queue.getId();
         var name = queue.getName();
         this.logger.log("Queue deleted " + id + " " + name);
@@ -703,14 +486,14 @@ Finn = (function ($) {
         this.emit('queue deleted', id);
     };
 
-    Finn.prototype._queueLoadError = function (err) {
+    _queueLoadError(err) {
         this.logger.log("Queue load error " + err);
         if (!this.loaded && this.loadCallback) {
             this.loadCallback("Queue load error " + err);
         }
     };
     
-    Finn.prototype._callsLoaded = function (callsResponse) {
+    _callsLoaded(callsResponse) {
         var self = this;
         this.logger.log("Dialogs loaded.");
         this.calls = this.calls || {};
@@ -721,19 +504,19 @@ Finn = (function ($) {
         });
     };
     
-    Finn.prototype._callsLoadError = function (err) {
+    _callsLoadError(err) {
         this.logger.log("Call load error " + err);
     };
     
-    Finn.prototype._loadCall = function (rawCall) {
+    _loadCall(rawCall) {
         this.logger.log("Loading call: " + rawCall.getId());
-        var call = this.calls[rawCall.getId()] || new Finn.Call(this);
+        var call = this.calls[rawCall.getId()] || new Call(this);
         call._updateFromResponse(rawCall);
         this.calls[call.id] = call;
         return call;
     };
     
-    Finn.prototype._callStarted = function (rawCall) {
+    _callStarted(rawCall) {
         this.logger.log("Call added.");
         rawCall.addHandler('change', this._callChanged.bind(this));
         var call = this._loadCall(rawCall);
@@ -743,7 +526,7 @@ Finn = (function ($) {
         this.emit('call started', call);
     };
 
-    Finn.prototype._callChanged = function (rawCall) {
+    _callChanged(rawCall) {
         var id = rawCall.getId();
         this.logger.log("Call updated " + id);
         var call = this._loadCall(rawCall);
@@ -754,7 +537,7 @@ Finn = (function ($) {
         this.emit('call updated', call);
     };
 
-    Finn.prototype._callEnded = function (rawCall) {
+    _callEnded(rawCall) {
         var id = rawCall.getId();
         this.logger.log("Call ended " + id);
         var call = this._loadCall(rawCall);
@@ -766,8 +549,111 @@ Finn = (function ($) {
         // Deprecated
         this.emit('call ended', call);
     };
+
+
+
+
+    _mediaListLoaded(mediaListResponse) {
+        var self = this;
+        this.logger.log("Media list loaded.");
+        this.channels = this.channels || {};
+        var rawMedia = mediaListResponse.getCollection();
+        self._mediaLoadStatus = self._mediaLoadStatus || {};
+
+        if ($.isEmptyObject(rawMedia) || rawMedia.length == 0) {
+            self._callbackIfLoaded();
+        }
+        else {
+            $.each(rawMedia, function (id, media) {
+                self._mediaLoadStatus[id] = false;
+
+                mediaListResponse.getMedia({
+                    id: id,
+                    onLoad: self._mediaLoaded.bind(self),
+                    onChange: self._mediaChanged.bind(self)
+                });
+                //media.addHandler('change', self._queueChanged.bind(self));
+                //media.addHandler('load', self._queueLoaded.bind(self));
+            });
+        }
+    };
+
+    _mediaLoaded(rawMedia) {
+        var id = rawMedia.getId();
+        this.logger.log("Media loaded: " + id);
+
+        var media = this.channels[id] || new Channel(this, this.mediaOptions);
+        media._updateFromResponse(rawMedia);
+
+    //    queue._updateFromResponse(rawQueue);
+        this.channels[id] = media;
+
+        this._mediaLoadStatus[id] = true;
+        this._callbackIfLoaded();
+
+        return media;
+    };
+
+    _mediaChanged(rawMedia) {
+        this.logger.log("Media updated.");
+        var media = this._mediaLoaded(rawMedia);
+
+        this.emit('channel_updated');
+    }
+
+    _taskStarted(rawTask) {
+        this.logger.log("Task started: " + rawTask.getId());
+    }
+
+    _taskEnded(rawTask) {
+        this.logger.log("Task ended: " + rawTask.getId());
+
+    }
+
+    // _queueAdded(queue) {
+    //     this.logger.log("Queue added.");
+    //     var newQueue = this._queueLoaded(queue);
+
+    //     this.emit('queue_added', newQueue);
+    //     // Deprecated
+    //     this.emit('queue added', newQueue);
+    // };
+
+    // _queueChanged(queue) {
+    //     this.logger.log("Queue has been updated.");
+    //     var changedQueue = this._queueLoaded(queue);
+    //     changedQueue._events = queue._events;
+
+    //     changedQueue.emit('updated')
+
+    //     this.emit('queue_updated', changedQueue);
+    //     // Deprecated
+    //     this.emit('queue updated', changedQueue);
+    // };
+
+    // _queueDeleted(queue) {
+    //     var id = queue.getId();
+    //     var name = queue.getName();
+    //     this.logger.log("Queue deleted " + id + " " + name);
+
+    //     this.queues[id].emit('deleted');
+
+    //     delete this.queues[id];
+
+    //     this.emit('queue_deleted', id);
+    //     // Deprecated
+    //     this.emit('queue deleted', id);
+    // };
+
+    // _queueLoadError(err) {
+    //     this.logger.log("Queue load error " + err);
+    //     if (!this.loaded && this.loadCallback) {
+    //         this.loadCallback("Queue load error " + err);
+    //     }
+    // };
+
     
-    Finn.prototype.makeCall = function (number, callback) {
+    makeCall(number, callback) {
         if (!callback || typeof callback !== "function") {
             callback = function() {};
         }
@@ -782,14 +668,14 @@ Finn = (function ($) {
         });
     }
 
-    Finn.prototype.ready = function () {
+    ready() {
         if (!this.loaded) {
             callback("Finesse not loaded.");
         }
         
         this.agent._raw.setState("READY");
     }
-    Finn.prototype.notReady = function (reasonCodeId) {
+    notReady(reasonCodeId) {
         if (!this.loaded) {
             callback("Finesse not loaded.");
         }
@@ -803,7 +689,7 @@ Finn = (function ($) {
         
         this.agent._raw.setState("NOT_READY", reason);
     }
-    Finn.prototype.logout = function (reasonCodeId) {
+    logout(reasonCodeId) {
         if (!this.loaded) {
             callback("Finesse not loaded.");
         }
@@ -818,23 +704,16 @@ Finn = (function ($) {
         this.agent._raw.logout(reason);
     }
 
-    Finn.prototype._isFullyLoaded = function () {
+    _isFullyLoaded() {
         return (
-            isLoaded(this._queueLoadStatus) &&
-            isLoaded(this._teamLoadStatus) &&
+            this._isLoaded(this._queueLoadStatus) &&
+            this._isLoaded(this._mediaLoadStatus) &&
+            this._isLoaded(this._teamLoadStatus) &&
             this._notReadyReasonCodesLoadStatus &&
             this._signoutReasonCodesLoadStatus
         );
     }
-    Finn.prototype._callbackIfLoaded = function () {
-        if (!this.loaded && this._isFullyLoaded()) {
-            if (this.loadCallback)
-                this.loadCallback(null, this.agent);
-            this.loaded = true;
-        }
-    }
-
-    function isLoaded(loadStatus) {
+    _isLoaded(loadStatus) {
         if (!loadStatus) {
             return false;
         }
@@ -849,31 +728,21 @@ Finn = (function ($) {
 
         return isLoaded;
     }
+    _callbackIfLoaded() {
+        if (!this.loaded && this._isFullyLoaded()) {
+            this.loaded = true;
+            if (this.loadCallback)
+                this.loadCallback(null, this.agent);
+        }
+    }
 
-    function isSupervisor(user) {
+    _isSupervisor(user) {
         return user._data.roles && user._data.roles.role && user._data.roles.role.indexOf("Supervisor") > -1
     }
-    
-    function getAgentState(agent) {
-    	var state = agent.getState();
-        var prettyState = finesse.utilities.I18n.getString("desktop.agent.header.state." + state);
-        var reasonCodeLabel = agent.getReasonCodeLabel();
-        var reasonCodeId = agent.getNotReadyReasonCodeId();
-        var stateChangeTime = agent.getStateChangeTime();
-        return {
-            name: state,
-            pretty: prettyState,
-            reasonCodeId: reasonCodeId,
-            reasonCodeLabel: reasonCodeLabel,
-            startTime: new Date(finesse.utilities.Utilities.extractTime(stateChangeTime)),
-            startTimeString: stateChangeTime
-        };
-    }
 
-	return Finn;
+}
 
-}(jQuery));
-
+window.Finn = Finn;
 
 /**
 * Fix for awkward gadget 'onConnect' behavior.
@@ -904,9 +773,9 @@ Finn = (function ($) {
 * gadget code without worrying too much about when we actually load it.
 *
 */
-gadgets = gadgets || {};
-gadgets.HubSettings = gadgets.HubSettings || {};
-gadgets.HubSettings.onConnectHandler = function () {};
-gadgets.HubSettings.onConnect = function () {
+window.gadgets = window.gadgets || {};
+window.gadgets.HubSettings = window.gadgets.HubSettings || {};
+window.gadgets.HubSettings.onConnectHandler = function () {};
+window.gadgets.HubSettings.onConnect = function () {
     gadgets.HubSettings.onConnectHandler();
 };
