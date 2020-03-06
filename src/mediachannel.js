@@ -9,7 +9,7 @@ export class Channel extends EventEmitter {
         this._finn = finn;
         this._loginPending = false;
         this.tasks = {};
-        this.mediaOptions = options.mediaOptions || {
+        this.mediaOptions = options || {
             maxDialogLimit: 3,
             interruptAction: 'ACCEPT',
             dialogLogoutAction: 'CLOSE'

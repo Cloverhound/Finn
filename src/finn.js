@@ -598,7 +598,7 @@ export class Finn extends EventEmitter {
         this.logger.log("Media updated.");
         var media = this._mediaLoaded(rawMedia);
 
-        this.emit('channel_updated');
+        this.emit('channel_updated', media);
     }
 
     _taskStarted(rawTask) {
