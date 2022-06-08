@@ -1,7 +1,7 @@
 # Finn
 A wrapper around Cisco's Finesse library to make gadget development easier.
 
-# Basic Usage
+## Basic Usage
 
 ```
 const GADGET_NAME = "MyAwesomeGadget";
