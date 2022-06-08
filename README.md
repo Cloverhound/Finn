@@ -1,6 +1,13 @@
 # Finn
 A wrapper around Cisco's Finesse library to make gadget development easier.
 
+## Build
+
+`npm install`
+`gulp`
+
+Writes file to `/dist` folder. For any recent version of Finesse use the `finn-x.x.x.x.js` file. Include it in your gadget project like any other js file. Make sure you still import the Finesse SDK and any other necessary files as before within your gadget.
+
 ## Basic Usage
 
 ```
